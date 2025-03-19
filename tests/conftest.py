@@ -48,7 +48,9 @@ def payload():
 
 @pytest.fixture
 def admin_user(session):
-    usr = create_or_update_user("some.one@department.gov.uk", "admin", True, session)
+    usr = create_or_update_user(
+        "some.one@department.gov.uk", "admin", True, 10_000, session
+    )
     yield usr
     session.delete(usr)
     session.commit()
@@ -56,7 +58,9 @@ def admin_user(session):
 
 @pytest.fixture
 def user(session):
-    usr = create_or_update_user("an.other@department.gov.uk", "admin", False, session)
+    usr = create_or_update_user(
+        "an.other@department.gov.uk", "admin", False, 1_000, session
+    )
     yield usr
     session.delete(usr)
     session.commit()
@@ -71,8 +75,8 @@ def user_with_spend(user, session):
             response_id="1",
             user_id=user.id,
             model="a-model",
-            prompt_tokens=2,
-            completion_tokens=3,
+            prompt_tokens=200,
+            completion_tokens=100,
         )
         for seconds in range(120)
     ]

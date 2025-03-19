@@ -33,9 +33,9 @@ def get_session():
 
 
 class Spend(BaseModel):
-    requests: int | None = None
-    completion_tokens: int | None = None
-    prompt_tokens: int | None = None
+    requests: int
+    completion_tokens: int
+    prompt_tokens: int
 
 
 class User(SQLModel):

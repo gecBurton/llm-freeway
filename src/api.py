@@ -26,7 +26,7 @@ app = FastAPI()
 def on_startup():
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
-        create_or_update_user("admin", "admin", True, session)
+        create_or_update_user("admin", "admin", True, 10_0000, session)
 
 
 @asynccontextmanager

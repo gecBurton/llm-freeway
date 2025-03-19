@@ -62,6 +62,23 @@ async def test_chat_completions(get_session_override, payload, admin_user):
 
 
 @pytest.mark.anyio
+async def test_chat_completions_too_many_requests(
+    get_session_override, payload, user_with_spend
+):
+    app.dependency_overrides[get_session] = get_session_override
+
+    test_client = TestClient(app=app, base_url="http://test")
+    response = test_client.post(
+        "/chat/completions",
+        json=dict(payload, stream=False),
+        headers=user_with_spend.headers(),
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "tokens_per_minute exceeded"}
+
+
+@pytest.mark.anyio
 async def test_chat_completions_streaming(get_session_override, payload, admin_user):
     app.dependency_overrides[get_session] = get_session_override
 

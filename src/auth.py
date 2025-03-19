@@ -49,17 +49,23 @@ async def get_current_user(
 
 
 def create_or_update_user(
-    username, password, is_admin, session: Annotated[Session, Depends(get_session)]
+    username,
+    password,
+    is_admin,
+    tokens_per_minute,
+    session: Annotated[Session, Depends(get_session)],
 ) -> UserDB:
     if user_db := get_account(username, session):
         user_db.username = username
         user_db.is_admin = is_admin
         user_db.hashed_password = pwd_context.hash(password)
+        user_db.tokens_per_minute = tokens_per_minute
     else:
         user_db = UserDB(
             username=username,
             is_admin=is_admin,
             hashed_password=pwd_context.hash(password),
+            tokens_per_minute=tokens_per_minute,
         )
 
     session.add(user_db)

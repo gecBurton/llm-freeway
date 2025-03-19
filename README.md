@@ -14,7 +14,7 @@ IOC JWT based auth
 * `/spend/logs`
   * see what you, and others in your team have spent
 
-* `/user/`
+* `/users/`
   * get your own user details or others if youre an admin
   * create/update 
 

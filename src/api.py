@@ -99,6 +99,10 @@ async def stream_response(
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
+class EventLogResponse(BaseModel):
+    logs: list[EventLog]
+
+
 @app.get(path="/spend/logs")
 def spend_logs(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -107,10 +111,10 @@ def spend_logs(
     response_id: str | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
-) -> list[EventLog]:
-    """needs paginating"""
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, gt=0),
+) -> EventLogResponse:
     query = select(EventLog)
-
     if not current_user.is_admin:
         query = query.where(EventLog.user_id == current_user.id)
     if user_id:
@@ -121,8 +125,8 @@ def spend_logs(
         query = query.where(EventLog.timestamp >= start_date)
     if end_date:
         query = query.where(EventLog.timestamp < end_date)
-    logs = session.exec(query).all()
-    return logs
+    logs = session.exec(query.offset(skip).limit(limit)).all()
+    return EventLogResponse(logs=logs, skip=skip, limit=limit)
 
 
 @app.post("/token")
@@ -146,7 +150,7 @@ class UserResponse(BaseModel):
     users: list[User]
 
 
-@app.get(path="/users")
+@app.get(path="/users", tags=["users"])
 def get_users(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
@@ -167,7 +171,7 @@ class UserRequest(BaseModel):
     is_admin: bool = False
 
 
-@app.post(path="/users")
+@app.post(path="/users", tags=["users"])
 def create_user(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
@@ -192,7 +196,7 @@ def create_user(
     return user_to_create
 
 
-@app.put(path="/users/{user_id}")
+@app.put(path="/users/{user_id}", tags=["users"])
 def update_user(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
@@ -220,7 +224,7 @@ def update_user(
     return user_to_update
 
 
-@app.delete(path="/users/{user_id}")
+@app.delete(path="/users/{user_id}", tags=["users"])
 def delete_user(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],

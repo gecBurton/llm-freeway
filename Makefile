@@ -1,5 +1,5 @@
 web:
-	poetry run fastapi run src/main.py
+	poetry run fastapi run src/api.py
 
 test:
 	poetry run pytest --cov-report term-missing --cov=src --cov-fail-under=90 tests

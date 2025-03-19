@@ -50,7 +50,7 @@ async def test_chat_completions(get_session_override, payload, admin_user):
     )
 
     assert log_response.status_code == 200
-    log_response_json = log_response.json()
+    log_response_json = log_response.json()["logs"]
     assert isinstance(log_response_json, list)
     assert len(log_response_json) == 1
 
@@ -124,7 +124,7 @@ async def test_chat_completions_streaming(get_session_override, payload, admin_u
     )
 
     assert log_response.status_code == 200
-    log_response_json = log_response.json()
+    log_response_json = log_response.json()["logs"]
     assert isinstance(log_response_json, list)
     assert len(log_response_json) == 1
 

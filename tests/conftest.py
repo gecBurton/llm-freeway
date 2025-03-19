@@ -1,40 +1,46 @@
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import StaticPool, create_engine
 from sqlmodel import Session, SQLModel
+from starlette.testclient import TestClient
 
+from llm_freeway.api import app
 from llm_freeway.auth import create_or_update_user
-from llm_freeway.database import EventLog
+from llm_freeway.database import EventLog, get_session
 from llm_freeway.settings import Settings
 
 env = Settings()
 
 
-@pytest.fixture
-def engine():
-    _engine = create_engine(
-        # "sqlite:///:memory:",
-        "sqlite:///test.db",
-        connect_args={"check_same_thread": False},
+@pytest.fixture(name="session")
+def session():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
-    SQLModel.metadata.create_all(_engine)
-    yield _engine
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
 
 
 @pytest.fixture
-def get_session_override(engine):
+def get_session_override(session):
     def f():
-        with Session(engine) as session:
-            yield session
+        return session
 
     return f
 
 
-@pytest.fixture
-def session(engine):
-    with Session(engine) as _session:
-        yield _session
+@pytest.fixture()
+def client(session: Session):
+    def get_session_override():
+        return session
+
+    app.dependency_overrides[get_session] = get_session_override
+
+    client = TestClient(app)
+    yield client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

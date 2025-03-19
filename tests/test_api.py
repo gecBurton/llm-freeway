@@ -9,11 +9,8 @@ from llm_freeway.api import app, get_session
 
 
 @pytest.mark.anyio
-async def test_chat_completions(get_session_override, payload, admin_user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-    response = test_client.post(
+async def test_chat_completions(client, payload, admin_user):
+    response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
         headers=admin_user.headers(),
@@ -43,7 +40,7 @@ async def test_chat_completions(get_session_override, payload, admin_user):
         "total_tokens": 30,
     }
 
-    log_response = test_client.get(
+    log_response = client.get(
         "/spend/logs",
         params=dict(response_id=response_json["id"]),
         headers=admin_user.headers(),
@@ -62,13 +59,8 @@ async def test_chat_completions(get_session_override, payload, admin_user):
 
 
 @pytest.mark.anyio
-async def test_chat_completions_too_many_requests(
-    get_session_override, payload, user_with_spend
-):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-    response = test_client.post(
+async def test_chat_completions_too_many_requests(client, payload, user_with_spend):
+    response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
         headers=user_with_spend.headers(),
@@ -135,12 +127,8 @@ async def test_chat_completions_streaming(get_session_override, payload, admin_u
     assert log_response_json[0]["user_id"] == str(admin_user.id)
 
 
-def test_get_users(get_session_override, admin_user, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
-    response = test_client.get("/users", headers=user.headers())
+def test_get_users(client, admin_user, user):
+    response = client.get("/users", headers=user.headers())
 
     assert response.status_code == 200, response.text
     response_json = response.json()
@@ -150,12 +138,8 @@ def test_get_users(get_session_override, admin_user, user):
     assert users[0]["id"] == str(user.id)
 
 
-def test_get_users_not_admin(get_session_override, admin_user, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
-    response = test_client.get("/users", headers=admin_user.headers())
+def test_get_users_not_admin(client, admin_user, user):
+    response = client.get("/users", headers=admin_user.headers())
 
     assert response.status_code == 200, response.text
     response_json = response.json()
@@ -164,14 +148,10 @@ def test_get_users_not_admin(get_session_override, admin_user, user):
     assert len(users) == 2
 
 
-def test_create_user(get_session_override, admin_user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
+def test_create_user(client, admin_user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
-    response = test_client.post("/users", json=payload, headers=admin_user.headers())
+    response = client.post("/users", json=payload, headers=admin_user.headers())
 
     assert response.status_code == 200
     response_json = response.json()
@@ -180,14 +160,10 @@ def test_create_user(get_session_override, admin_user):
     assert response_json["username"] == "some-one"
 
 
-def test_create_user_not_admin(get_session_override, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
+def test_create_user_not_admin(client, user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
-    response = test_client.post("/users", json=payload, headers=user.headers())
+    response = client.post("/users", json=payload, headers=user.headers())
 
     assert response.status_code == 400
     assert response.json() == {
@@ -195,14 +171,10 @@ def test_create_user_not_admin(get_session_override, user):
     }
 
 
-def test_update_user(get_session_override, admin_user, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
+def test_update_user(client, admin_user, user):
     payload = {"username": "someone-else", "password": "password", "is_admin": True}
 
-    response = test_client.put(
+    response = client.put(
         f"/users/{user.id}", json=payload, headers=admin_user.headers()
     )
 
@@ -213,16 +185,10 @@ def test_update_user(get_session_override, admin_user, user):
     assert response_json["username"] == "someone-else"
 
 
-def test_update_user_not_admin(get_session_override, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
+def test_update_user_not_admin(client, user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
-    response = test_client.put(
-        f"/users/{user.id}", json=payload, headers=user.headers()
-    )
+    response = client.put(f"/users/{user.id}", json=payload, headers=user.headers())
 
     assert response.status_code == 400
     assert response.json() == {
@@ -230,22 +196,14 @@ def test_update_user_not_admin(get_session_override, user):
     }
 
 
-def test_delete_user(get_session_override, admin_user, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
-    response = test_client.delete(f"/users/{user.id}", headers=admin_user.headers())
+def test_delete_user(client, admin_user, user):
+    response = client.delete(f"/users/{user.id}", headers=admin_user.headers())
 
     assert response.status_code == 200
 
 
-def test_delete_user_not_admin(get_session_override, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
-    response = test_client.delete(f"/users/{user.id}", headers=user.headers())
+def test_delete_user_not_admin(client, user):
+    response = client.delete(f"/users/{user.id}", headers=user.headers())
 
     assert response.status_code == 400
     assert response.json() == {
@@ -253,14 +211,10 @@ def test_delete_user_not_admin(get_session_override, user):
     }
 
 
-def test_token(get_session_override, user):
-    app.dependency_overrides[get_session] = get_session_override
-
-    test_client = TestClient(app=app, base_url="http://test")
-
+def test_token(client, user):
     payload = {"username": user.username, "password": "admin"}
 
-    response = test_client.post("/token", data=payload)
+    response = client.post("/token", data=payload)
     response_json = response.json()
 
     assert response.status_code == 200, response.text

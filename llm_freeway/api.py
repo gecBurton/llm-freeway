@@ -11,27 +11,22 @@ from sqlmodel import Session, SQLModel, select
 from starlette import status
 from starlette.responses import StreamingResponse
 
-from src.auth import (
+from llm_freeway.auth import (
     authenticate_user,
     create_or_update_user,
     get_current_user,
     pwd_context,
 )
-from src.database import EventLog, Token, User, UserDB, engine, get_session
+from llm_freeway.database import EventLog, Token, User, UserDB, engine, get_session
 
 app = FastAPI()
-
-
-@app.on_event("startup")
-def on_startup():
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        create_or_update_user("admin", "admin", True, 10_0000, session)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        create_or_update_user("admin", "admin", True, 10_0000, session)
 
 
 class ChatMessage(BaseModel):

@@ -5,7 +5,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
-from src.api import app, get_session
+from llm_freeway.api import app, get_session
 
 
 @pytest.mark.anyio

@@ -8,7 +8,7 @@ from passlib.context import CryptContext
 from sqlmodel import Session
 from starlette import status
 
-from src.database import User, UserDB, env, get_account, get_session
+from llm_freeway.database import User, UserDB, env, get_account, get_session
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 

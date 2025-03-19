@@ -1,6 +1,6 @@
 import pytest
 
-from src.database import Spend
+from llm_freeway.database import Spend
 
 
 @pytest.mark.freeze_time("2017-05-21")

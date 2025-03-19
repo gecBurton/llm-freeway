@@ -4,9 +4,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlmodel import Session, SQLModel
 
-from src.auth import create_or_update_user
-from src.database import EventLog
-from src.settings import Settings
+from llm_freeway.auth import create_or_update_user
+from llm_freeway.database import EventLog
+from llm_freeway.settings import Settings
 
 env = Settings()
 

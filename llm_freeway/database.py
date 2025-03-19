@@ -45,17 +45,16 @@ class User(SQLModel):
     requests_per_minute: int = 60
     tokens_per_minute: int = 100_000
 
-    def get_token(self) -> Token:
+    def get_token(self) -> str:
         access_token_expires = timedelta(minutes=env.access_token_expire_minutes)
-        access_token = create_access_token(
+        return create_access_token(
             data={"sub": self.username},
             expires_delta=access_token_expires,
         )
-        return Token(access_token=access_token, token_type="bearer")
 
     def headers(self) -> dict[str, str]:
         token = self.get_token()
-        return {"Authorization": f"Bearer {token.access_token}"}
+        return {"Authorization": f"Bearer {token}"}
 
     def get_spend(self, session) -> Spend:
         one_minute_ago = datetime.now(tz=UTC) - timedelta(minutes=1)

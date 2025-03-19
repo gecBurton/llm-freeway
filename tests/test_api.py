@@ -211,8 +211,8 @@ def test_delete_user_not_admin(client, user):
     }
 
 
-def test_token(client, user):
-    payload = {"username": user.username, "password": "admin"}
+def test_token(client, admin_user, admin_user_password):
+    payload = {"username": admin_user.username, "password": admin_user_password}
 
     response = client.post("/token", data=payload)
     response_json = response.json()
@@ -222,4 +222,16 @@ def test_token(client, user):
     token = jwt.decode(
         response_json["access_token"], options={"verify_signature": False}
     )
-    assert token["sub"] == user.username
+    assert token["sub"] == admin_user.username
+
+
+
+
+def test_token_fail(client, admin_user):
+    payload = {"username": admin_user.username, "password": "wrong password"}
+
+    response = client.post("/token", data=payload)
+    response_json = response.json()
+
+    assert response.status_code == 401
+    assert response_json == {'detail': 'Incorrect username or password'}

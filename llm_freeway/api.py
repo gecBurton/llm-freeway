@@ -13,7 +13,7 @@ from starlette.responses import StreamingResponse
 
 from llm_freeway.auth import (
     authenticate_user,
-    create_or_update_user,
+    create_user_db,
     get_current_user,
     pwd_context,
 )
@@ -26,7 +26,7 @@ app = FastAPI()
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
-        create_or_update_user("admin", "admin", True, 10_0000, session)
+        create_user_db("admin", "admin", True, 10_0000, session)
 
 
 class ChatMessage(BaseModel):
@@ -136,7 +136,7 @@ def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return user.get_token()
+    return Token(access_token=user.get_token(), token_type="bearer")
 
 
 class UserResponse(BaseModel):

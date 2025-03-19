@@ -6,7 +6,7 @@ from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app
-from llm_freeway.auth import create_or_update_user
+from llm_freeway.auth import create_user_db
 from llm_freeway.database import EventLog, get_session
 from llm_freeway.settings import Settings
 
@@ -51,12 +51,14 @@ def payload():
         "mock_response": "hello, how can i help you?",
     }
 
+@pytest.fixture
+def admin_user_password():
+    yield "admin"
+
 
 @pytest.fixture
-def admin_user(session):
-    usr = create_or_update_user(
-        "some.one@department.gov.uk", "admin", True, 10_000, session
-    )
+def admin_user(session, admin_user_password):
+    usr = create_user_db("some.one@department.gov.uk", admin_user_password, True, 10_000, session)
     yield usr
     session.delete(usr)
     session.commit()
@@ -64,9 +66,7 @@ def admin_user(session):
 
 @pytest.fixture
 def user(session):
-    usr = create_or_update_user(
-        "an.other@department.gov.uk", "admin", False, 1_000, session
-    )
+    usr = create_user_db("an.other@department.gov.uk", "admin", False, 1_000, session)
     yield usr
     session.delete(usr)
     session.commit()

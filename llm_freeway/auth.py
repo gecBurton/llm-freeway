@@ -16,9 +16,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def authenticate_user(
-    email: str, password: str, session: Annotated[Session, Depends(get_session)]
+    username: str, password: str, session: Annotated[Session, Depends(get_session)]
 ) -> User | None:
-    user = get_account(email, session)
+    user = get_account(username, session)
     if not user:
         return None
     if not pwd_context.verify(password, user.hashed_password):
@@ -48,25 +48,22 @@ async def get_current_user(
     return user
 
 
-def create_or_update_user(
+def create_user_db(
     username,
     password,
     is_admin,
     tokens_per_minute,
     session: Annotated[Session, Depends(get_session)],
-) -> UserDB:
-    if user_db := get_account(username, session):
-        user_db.username = username
-        user_db.is_admin = is_admin
-        user_db.hashed_password = pwd_context.hash(password)
-        user_db.tokens_per_minute = tokens_per_minute
-    else:
-        user_db = UserDB(
-            username=username,
-            is_admin=is_admin,
-            hashed_password=pwd_context.hash(password),
-            tokens_per_minute=tokens_per_minute,
-        )
+) -> UserDB | None:
+    if get_account(username, session):
+        return None
+
+    user_db = UserDB(
+        username=username,
+        is_admin=is_admin,
+        hashed_password=pwd_context.hash(password),
+        tokens_per_minute=tokens_per_minute,
+    )
 
     session.add(user_db)
     session.commit()

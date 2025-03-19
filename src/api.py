@@ -52,6 +52,19 @@ async def stream_response(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
 ):
+    spend = current_user.get_spend(session)
+    if spend.requests > current_user.requests_per_minute:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="requests_per_minute exceeded",
+        )
+
+    if spend.prompt_tokens + spend.completion_tokens > current_user.tokens_per_minute:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="tokens_per_minute exceeded",
+        )
+
     if not body.stream:
         response = completion(**body.model_dump())
         log = EventLog(

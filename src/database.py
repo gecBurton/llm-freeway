@@ -43,6 +43,7 @@ class User(SQLModel):
     username: str = Field(unique=True)
     is_admin: bool = False
     requests_per_minute: int = 60
+    tokens_per_minute: int = 100_000
 
     def get_token(self) -> Token:
         access_token_expires = timedelta(minutes=env.access_token_expire_minutes)

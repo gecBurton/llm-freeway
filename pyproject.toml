@@ -27,6 +27,8 @@ pytest = "^8.3.5"
 trio = "^0.29.0"
 ruff = "^0.9.9"
 pytest-cov = "^6.0.0"
+pytest-freezegun = "^0.4.2"
+setuptools = "^76.1.0"
 
 [tool.ruff.lint]
 extend-select = ["I"]

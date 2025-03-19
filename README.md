@@ -7,9 +7,9 @@ An Opensource proxy server for litellm
 IOC JWT based auth
 
 * `/chat/completions`
-  * restrict model access
-  * restrict spend
-  * rate limiting
+  * dollars per minute
+  * requests per minute
+  * tokens per minute
 
 * `/spend/logs`
   * see what you, and others in your team have spent

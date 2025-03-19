@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -6,7 +6,6 @@ import jwt
 from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy import create_engine
-from sqlalchemy.sql.functions import now
 from sqlmodel import Field, Session, SQLModel, select
 
 from src.settings import env
@@ -20,12 +19,9 @@ class Token(BaseModel):
     token_type: str
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta) -> str:
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    expire = datetime.now(timezone.utc) + expires_delta
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, env.secret_key, algorithm=env.algorithm)
     return encoded_jwt
@@ -36,15 +32,22 @@ def get_session():
         yield session
 
 
+class Spend(BaseModel):
+    requests: int | None = None
+    completion_tokens: int | None = None
+    prompt_tokens: int | None = None
+
+
 class User(SQLModel):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     username: str = Field(unique=True)
     is_admin: bool = False
+    requests_per_minute: int = 60
 
     def get_token(self) -> Token:
         access_token_expires = timedelta(minutes=env.access_token_expire_minutes)
         access_token = create_access_token(
-            data={"sub": self.username, "models": ["azure/gpt-4o"]},
+            data={"sub": self.username},
             expires_delta=access_token_expires,
         )
         return Token(access_token=access_token, token_type="bearer")
@@ -53,6 +56,24 @@ class User(SQLModel):
         token = self.get_token()
         return {"Authorization": f"Bearer {token.access_token}"}
 
+    def get_spend(self, session) -> Spend:
+        one_minute_ago = datetime.now(tz=UTC) - timedelta(minutes=1)
+
+        events = session.exec(
+            select(EventLog).where(
+                EventLog.user_id == self.id, EventLog.timestamp <= one_minute_ago
+            )
+        ).all()
+        completion_tokens_sum = sum(event.completion_tokens for event in events)
+        prompt_tokens_sum = sum(event.prompt_tokens for event in events)
+        requests = sum(1 for _ in events)
+
+        return Spend(
+            completion_tokens=completion_tokens_sum,
+            prompt_tokens=prompt_tokens_sum,
+            requests=requests,
+        )
+
 
 class UserDB(User, table=True):
     hashed_password: str
@@ -60,13 +81,12 @@ class UserDB(User, table=True):
 
 class EventLog(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    timestamp: datetime = Field(default_factory=now)
+    timestamp: datetime = Field(default_factory=datetime.now)
     response_id: str = Field(index=True)
     user_id: UUID = Field(default=None, foreign_key="userdb.id")
     model: str = Field()
     prompt_tokens: int = Field()
     completion_tokens: int = Field()
-    spend_group: str | None = Field(default=None)
 
 
 def get_account(

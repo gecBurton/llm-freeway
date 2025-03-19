@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta
+
 import pytest
 from sqlalchemy import create_engine
 from sqlmodel import Session, SQLModel
 
 from src.auth import create_or_update_user
+from src.database import EventLog
 from src.settings import Settings
 
 env = Settings()
@@ -56,4 +59,27 @@ def user(session):
     usr = create_or_update_user("an.other@department.gov.uk", "admin", False, session)
     yield usr
     session.delete(usr)
+    session.commit()
+
+
+@pytest.fixture
+def user_with_spend(user, session):
+    now = datetime.now()
+    events = [
+        EventLog(
+            timestamp=now - timedelta(seconds=seconds),
+            response_id="1",
+            user_id=user.id,
+            model="a-model",
+            prompt_tokens=2,
+            completion_tokens=3,
+        )
+        for seconds in range(120)
+    ]
+    for event in events:
+        session.add(event)
+    session.commit()
+    yield user
+    for event in events:
+        session.delete(event)
     session.commit()

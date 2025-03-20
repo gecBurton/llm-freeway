@@ -225,8 +225,6 @@ def test_token(client, admin_user, admin_user_password):
     assert token["sub"] == admin_user.username
 
 
-
-
 def test_token_fail(client, admin_user):
     payload = {"username": admin_user.username, "password": "wrong password"}
 
@@ -234,4 +232,4 @@ def test_token_fail(client, admin_user):
     response_json = response.json()
 
     assert response.status_code == 401
-    assert response_json == {'detail': 'Incorrect username or password'}
+    assert response_json == {"detail": "Incorrect username or password"}

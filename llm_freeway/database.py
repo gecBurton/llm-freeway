@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 import jwt
 from fastapi import Depends
 from pydantic import BaseModel
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlmodel import Field, Session, SQLModel, select
 
 from llm_freeway.settings import env
@@ -59,19 +59,21 @@ class User(SQLModel):
     def get_spend(self, session) -> Spend:
         one_minute_ago = datetime.now(tz=UTC) - timedelta(minutes=1)
 
-        events = session.exec(
-            select(EventLog).where(
-                EventLog.user_id == self.id, EventLog.timestamp <= one_minute_ago
+        completion_tokens, prompt_tokens, requests = session.exec(
+            select(
+                func.sum(EventLog.completion_tokens),
+                func.sum(EventLog.prompt_tokens),
+                func.count(EventLog.id),
+            ).where(
+                EventLog.user_id == self.id,
+                EventLog.timestamp <= one_minute_ago,
             )
-        ).all()
-        completion_tokens_sum = sum(event.completion_tokens for event in events)
-        prompt_tokens_sum = sum(event.prompt_tokens for event in events)
-        requests = sum(1 for _ in events)
+        ).one()
 
         return Spend(
-            completion_tokens=completion_tokens_sum,
-            prompt_tokens=prompt_tokens_sum,
-            requests=requests,
+            completion_tokens=completion_tokens or 0,
+            prompt_tokens=prompt_tokens or 0,
+            requests=requests or 0,
         )
 
 

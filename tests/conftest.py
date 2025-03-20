@@ -51,6 +51,7 @@ def payload():
         "mock_response": "hello, how can i help you?",
     }
 
+
 @pytest.fixture
 def admin_user_password():
     yield "admin"
@@ -58,7 +59,9 @@ def admin_user_password():
 
 @pytest.fixture
 def admin_user(session, admin_user_password):
-    usr = create_user_db("some.one@department.gov.uk", admin_user_password, True, 10_000, session)
+    usr = create_user_db(
+        "some.one@department.gov.uk", admin_user_password, True, 10_000, session
+    )
     yield usr
     session.delete(usr)
     session.commit()

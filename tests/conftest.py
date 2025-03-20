@@ -86,6 +86,7 @@ def user_with_spend(user, session):
             model="a-model",
             prompt_tokens=200,
             completion_tokens=100,
+            cost_usd=0.1,
         )
         for seconds in range(120)
     ]

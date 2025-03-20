@@ -36,6 +36,7 @@ class Spend(BaseModel):
     requests: int
     completion_tokens: int
     prompt_tokens: int
+    cost_usd: float | None
 
 
 class User(SQLModel):
@@ -58,6 +59,7 @@ class User(SQLModel):
 
     def get_spend(self, session) -> Spend:
         one_minute_ago = datetime.now(tz=UTC) - timedelta(minutes=1)
+        one_month_ago = datetime.now(tz=UTC) - timedelta(days=30)
 
         completion_tokens, prompt_tokens, requests = session.exec(
             select(
@@ -66,7 +68,16 @@ class User(SQLModel):
                 func.count(EventLog.id),
             ).where(
                 EventLog.user_id == self.id,
-                EventLog.timestamp <= one_minute_ago,
+                EventLog.timestamp > one_minute_ago,
+            )
+        ).one()
+
+        cost_usd = session.exec(
+            select(
+                func.sum(EventLog.cost_usd),
+            ).where(
+                EventLog.user_id == self.id,
+                EventLog.timestamp > one_month_ago,
             )
         ).one()
 
@@ -74,6 +85,7 @@ class User(SQLModel):
             completion_tokens=completion_tokens or 0,
             prompt_tokens=prompt_tokens or 0,
             requests=requests or 0,
+            cost_usd=cost_usd,
         )
 
 
@@ -89,6 +101,7 @@ class EventLog(SQLModel, table=True):
     model: str = Field()
     prompt_tokens: int = Field()
     completion_tokens: int = Field()
+    cost_usd: float | None = None
 
 
 def get_account(

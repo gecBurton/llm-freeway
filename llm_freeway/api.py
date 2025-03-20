@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from litellm import completion
+from litellm.types.utils import ModelResponse
 from pydantic import BaseModel, Field
 from sqlmodel import Session, SQLModel, select
 from starlette import status
@@ -41,6 +42,18 @@ class ChatRequest(BaseModel):
     mock_response: str | None = Field(default=None)
 
 
+def get_cost_usd(model_response: ModelResponse):
+    costs = {"gpt-4o": (0.1, 0.2)}
+    if model_response.model not in costs:
+        return None
+
+    input_cost_per_token, output_cost_per_token = costs[model_response.model]
+    return (
+        model_response.usage["prompt_tokens"] * input_cost_per_token
+        + model_response.usage["completion_tokens"] * output_cost_per_token
+    )
+
+
 @app.post(path="/chat/completions")
 async def stream_response(
     body: ChatRequest,
@@ -68,6 +81,7 @@ async def stream_response(
             response_id=response.id,
             prompt_tokens=response.usage["prompt_tokens"],
             completion_tokens=response.usage["completion_tokens"],
+            cost_usd=get_cost_usd(response),
         )
         session.add(log)
         session.commit()
@@ -85,6 +99,7 @@ async def stream_response(
                     response_id=part.id,
                     prompt_tokens=part.usage["prompt_tokens"],
                     completion_tokens=part.usage["completion_tokens"],
+                    cost_usd=get_cost_usd(part),
                 )
                 session.add(_log)
             yield f"data: {part.model_dump_json()}\n\n"

@@ -1,0 +1,38 @@
+name: Python application
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'feature/**'
+  workflow_dispatch:
+
+
+jobs:
+  checks:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.13"
+
+    - name: Set up Poetry
+      uses: abatilo/actions-poetry@v2
+      with:
+        poetry-version: 1.7.0
+
+    - name: Install dependencies
+      run: |
+        poetry install
+
+    - name: Check Formatting
+      run: make format
+
+    - name: Run Tests
+      run: make test

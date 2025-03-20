@@ -53,13 +53,20 @@ async def stream_response(
     if spend.requests > current_user.requests_per_minute:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="requests_per_minute exceeded",
+            detail=f"requests_per_minute={spend.requests} exceeded limit={current_user.requests_per_minute}",
         )
 
-    if spend.prompt_tokens + spend.completion_tokens > current_user.tokens_per_minute:
+    total_tokens = spend.prompt_tokens + spend.completion_tokens
+    if total_tokens > current_user.tokens_per_minute:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="tokens_per_minute exceeded",
+            detail=f"tokens_per_minute={total_tokens} exceeded limit={current_user.tokens_per_minute}",
+        )
+
+    if spend.cost_usd and spend.cost_usd > current_user.cost_usd_per_month:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"cost_usd_per_month exceeded={spend.cost_usd} exceeded limit={current_user.cost_usd_per_month}",
         )
 
     model = session.get(LLM, body.model)

@@ -46,6 +46,7 @@ class User(SQLModel):
     is_admin: bool = False
     requests_per_minute: int = 60
     tokens_per_minute: int = 100_000
+    cost_usd_per_month: int = 10
 
     def get_token(self) -> str:
         access_token_expires = timedelta(minutes=env.access_token_expire_minutes)

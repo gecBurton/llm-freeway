@@ -67,7 +67,23 @@ async def test_chat_completions_too_many_requests(client, payload, user_with_spe
     )
 
     assert response.status_code == 429
-    assert response.json() == {"detail": "tokens_per_minute exceeded"}
+    assert response.json() == {"detail": "tokens_per_minute=18000 exceeded limit=1000"}
+
+
+@pytest.mark.anyio
+async def test_chat_completions_too_much_usd(
+    client, payload, user_with_low_rate_high_spend
+):
+    response = client.post(
+        "/chat/completions",
+        json=dict(payload, stream=False),
+        headers=user_with_low_rate_high_spend.headers(),
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "detail": "cost_usd_per_month exceeded=1000.0 exceeded limit=10"
+    }
 
 
 @pytest.mark.anyio

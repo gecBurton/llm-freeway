@@ -99,6 +99,25 @@ def user_with_spend(user, session):
     session.commit()
 
 
+@pytest.fixture
+def user_with_low_rate_high_spend(user, session):
+    now = datetime.now()
+    event = EventLog(
+        timestamp=now - timedelta(seconds=1),
+        response_id="1",
+        user_id=user.id,
+        model="a-model",
+        prompt_tokens=200,
+        completion_tokens=100,
+        cost_usd=1_000,
+    )
+    session.add(event)
+    session.commit()
+    yield user
+    session.delete(event)
+    session.commit()
+
+
 @pytest.fixture(autouse=True)
 def gpt(session):
     llm = LLM(name="got-4o", input_cost_per_token=0.1, output_cost_per_token=0.2)

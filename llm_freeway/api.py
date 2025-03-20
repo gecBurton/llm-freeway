@@ -19,14 +19,16 @@ from llm_freeway.auth import (
 )
 from llm_freeway.database import LLM, EventLog, Token, User, UserDB, engine, get_session
 
-app = FastAPI()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         create_user_db("admin", "admin", True, 10_0000, session)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class ChatMessage(BaseModel):
@@ -208,9 +210,12 @@ def update_user(
             detail="you need to be an admin to create, update or delete a user",
         )
 
-    user_to_update: UserDB = session.exec(
-        select(UserDB).where(UserDB.id == user_id)
-    ).one()
+    user_to_update: UserDB = session.get(UserDB, user_id)
+    if user_to_update is None:
+        raise HTTPException(
+            status_code=404,
+            detail="user does not exist",
+        )
 
     user_to_update.username = user.username
     user_to_update.hashed_password = pwd_context.hash(user.password)

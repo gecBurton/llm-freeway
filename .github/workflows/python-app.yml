@@ -23,9 +23,7 @@ jobs:
         python-version: "3.13"
 
     - name: Set up Poetry
-      uses: abatilo/actions-poetry@v2
-      with:
-        poetry-version: 1.7.0
+      uses: abatilo/actions-poetry@v4
 
     - name: Install dependencies
       run: |

@@ -8,7 +8,10 @@ from llm_freeway.database import User, create_access_token
 
 
 def test_authenticate_user(admin_user, admin_user_password, session):
-    assert authenticate_user(admin_user.username, admin_user_password, session) == admin_user
+    assert (
+        authenticate_user(admin_user.username, admin_user_password, session)
+        == admin_user
+    )
 
 
 def test_authenticate_user_non_existent_user(admin_user, session):

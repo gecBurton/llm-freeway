@@ -17,9 +17,7 @@ from llm_freeway.auth import (
     get_current_user,
     pwd_context,
 )
-from llm_freeway.database import EventLog, Token, User, UserDB, engine, get_session
-
-app = FastAPI()
+from llm_freeway.database import LLM, EventLog, Token, User, UserDB, engine, get_session
 
 
 @asynccontextmanager
@@ -27,6 +25,10 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         create_user_db("admin", "admin", True, 10_0000, session)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class ChatMessage(BaseModel):
@@ -60,6 +62,8 @@ async def stream_response(
             detail="tokens_per_minute exceeded",
         )
 
+    model = session.get(LLM, body.model)
+
     if not body.stream:
         response = completion(**body.model_dump())
         log = EventLog(
@@ -68,6 +72,7 @@ async def stream_response(
             response_id=response.id,
             prompt_tokens=response.usage["prompt_tokens"],
             completion_tokens=response.usage["completion_tokens"],
+            cost_usd=model.compute_cost_usd(response) if model else None,
         )
         session.add(log)
         session.commit()
@@ -85,6 +90,7 @@ async def stream_response(
                     response_id=part.id,
                     prompt_tokens=part.usage["prompt_tokens"],
                     completion_tokens=part.usage["completion_tokens"],
+                    cost_usd=model.compute_cost_usd(part) if model else None,
                 )
                 session.add(_log)
             yield f"data: {part.model_dump_json()}\n\n"
@@ -204,9 +210,12 @@ def update_user(
             detail="you need to be an admin to create, update or delete a user",
         )
 
-    user_to_update: UserDB = session.exec(
-        select(UserDB).where(UserDB.id == user_id)
-    ).one()
+    user_to_update: UserDB = session.get(UserDB, user_id)
+    if user_to_update is None:
+        raise HTTPException(
+            status_code=404,
+            detail="user does not exist",
+        )
 
     user_to_update.username = user.username
     user_to_update.hashed_password = pwd_context.hash(user.password)

@@ -7,7 +7,7 @@ from starlette.testclient import TestClient
 
 from llm_freeway.api import app
 from llm_freeway.auth import create_user_db
-from llm_freeway.database import EventLog, get_session
+from llm_freeway.database import LLM, EventLog, get_session
 from llm_freeway.settings import Settings
 
 env = Settings()
@@ -86,6 +86,7 @@ def user_with_spend(user, session):
             model="a-model",
             prompt_tokens=200,
             completion_tokens=100,
+            cost_usd=0.1,
         )
         for seconds in range(120)
     ]
@@ -96,3 +97,13 @@ def user_with_spend(user, session):
     for event in events:
         session.delete(event)
     session.commit()
+
+
+@pytest.fixture(autouse=True)
+def gpt(session):
+    llm = LLM(name="got-4o", input_cost_per_token=0.1, output_cost_per_token=0.2)
+    session.add(llm)
+    session.commit()
+    session.refresh(llm)
+    yield llm
+    session.delete(llm)

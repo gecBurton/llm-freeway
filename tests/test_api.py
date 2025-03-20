@@ -196,6 +196,19 @@ def test_update_user_not_admin(client, user):
     }
 
 
+def test_update_user_does_not_exist(client, admin_user):
+    payload = {"username": "some-one", "password": "password", "is_admin": False}
+
+    response = client.put(
+        "/users/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        json=payload,
+        headers=admin_user.headers(),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "user does not exist"}
+
+
 def test_delete_user(client, admin_user, user):
     response = client.delete(f"/users/{user.id}", headers=admin_user.headers())
 

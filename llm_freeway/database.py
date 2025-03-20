@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import jwt
 from fastapi import Depends
+from litellm.types.utils import ModelResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlmodel import Field, Session, SQLModel, select
@@ -91,6 +92,18 @@ class User(SQLModel):
 
 class UserDB(User, table=True):
     hashed_password: str
+
+
+class LLM(SQLModel, table=True):
+    name: str = Field(primary_key=True)
+    input_cost_per_token: float
+    output_cost_per_token: float
+
+    def compute_cost_usd(self, model_response: ModelResponse) -> float:
+        return (
+            model_response.usage["prompt_tokens"] * self.input_cost_per_token
+            + model_response.usage["completion_tokens"] * self.output_cost_per_token
+        )
 
 
 class EventLog(SQLModel, table=True):

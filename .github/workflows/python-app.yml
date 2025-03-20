@@ -29,7 +29,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        poetry install --no-root
+        poetry install -vvv
 
     - name: Check Formatting
       run: make format

@@ -16,6 +16,7 @@ llm-freeway is a simple, secure and open-source proxy server for litellm.
   * Restrict user access by:
     * tokens-per-minute
     * requests-per-minute
+    * USD-per-month
 * logs
   * access to your own logs
   * access all logs if you are and admin

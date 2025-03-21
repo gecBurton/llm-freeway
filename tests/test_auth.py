@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 from fastapi import HTTPException
 
-from llm_freeway.auth import authenticate_user, create_user_db, get_current_user
+from llm_freeway.auth import authenticate_user, get_current_user
 from llm_freeway.database import User, create_access_token
 
 
@@ -52,14 +52,3 @@ async def test_get_current_user_token_has_no_user(session):
         await get_current_user(token, session)
     assert e.value.status_code == 401
     assert e.value.detail == "Could not validate credentials"
-
-
-def test_create_user_db(admin_user, admin_user_password, session):
-    user = create_user_db(
-        username=admin_user.username,
-        password=admin_user_password,
-        is_admin=True,
-        tokens_per_minute=10,
-        session=session,
-    )
-    assert user is None

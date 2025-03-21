@@ -148,18 +148,18 @@ async def test_chat_completions_streaming(
     assert log_response_json[0]["user_id"] == str(admin_user.id)
 
 
-def test_get_users(client, admin_user, user):
-    response = client.get("/users", headers=user.headers())
+def test_get_users(client, admin_user, normal_user):
+    response = client.get("/users", headers=normal_user.headers())
 
     assert response.status_code == httpx.codes.OK
     response_json = response.json()
 
     users = response_json["users"]
     assert len(users) == 1
-    assert users[0]["id"] == str(user.id)
+    assert users[0]["id"] == str(normal_user.id)
 
 
-def test_get_users_not_admin(client, admin_user, user):
+def test_get_users_not_admin(client, admin_user, normal_user):
     response = client.get("/users", headers=admin_user.headers())
 
     assert response.status_code == httpx.codes.OK
@@ -181,10 +181,10 @@ def test_create_user(client, admin_user):
     assert response_json["username"] == "some-one"
 
 
-def test_create_user_not_admin(client, user):
+def test_create_user_not_admin(client, normal_user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
-    response = client.post("/users", json=payload, headers=user.headers())
+    response = client.post("/users", json=payload, headers=normal_user.headers())
 
     assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
@@ -192,11 +192,11 @@ def test_create_user_not_admin(client, user):
     }
 
 
-def test_update_user(client, admin_user, user):
+def test_update_user(client, admin_user, normal_user):
     payload = {"username": "someone-else", "password": "password", "is_admin": True}
 
     response = client.put(
-        f"/users/{user.id}", json=payload, headers=admin_user.headers()
+        f"/users/{normal_user.id}", json=payload, headers=admin_user.headers()
     )
 
     assert response.status_code == httpx.codes.OK
@@ -206,10 +206,12 @@ def test_update_user(client, admin_user, user):
     assert response_json["username"] == "someone-else"
 
 
-def test_update_user_not_admin(client, user):
+def test_update_user_not_admin(client, normal_user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
-    response = client.put(f"/users/{user.id}", json=payload, headers=user.headers())
+    response = client.put(
+        f"/users/{normal_user.id}", json=payload, headers=normal_user.headers()
+    )
 
     assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
@@ -230,14 +232,14 @@ def test_update_user_does_not_exist(client, admin_user):
     assert response.json() == {"detail": "user does not exist"}
 
 
-def test_delete_user(client, admin_user, user):
-    response = client.delete(f"/users/{user.id}", headers=admin_user.headers())
+def test_delete_user(client, admin_user, normal_user):
+    response = client.delete(f"/users/{normal_user.id}", headers=admin_user.headers())
 
     assert response.status_code == httpx.codes.OK
 
 
-def test_delete_user_not_admin(client, user):
-    response = client.delete(f"/users/{user.id}", headers=user.headers())
+def test_delete_user_not_admin(client, normal_user):
+    response = client.delete(f"/users/{normal_user.id}", headers=normal_user.headers())
 
     assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
@@ -292,13 +294,13 @@ def test_create_model(client, admin_user):
     assert response.json() == payload
 
 
-def test_create_model_not_admin(client, user):
+def test_create_model_not_admin(client, normal_user):
     payload = {
         "input_cost_per_token": 0.1,
         "name": "gpt-4o-mini",
         "output_cost_per_token": 0.2,
     }
-    response = client.post("/models", json=payload, headers=user.headers())
+    response = client.post("/models", json=payload, headers=normal_user.headers())
     assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
         "detail": "you need to be an admin to perform this action"
@@ -317,13 +319,13 @@ def test_update_model(client, admin_user, gpt_4o):
     assert response.json() == dict(payload, name=gpt_4o.name)
 
 
-def test_update_model_not_admin(client, user, gpt_4o):
+def test_update_model_not_admin(client, normal_user, gpt_4o):
     payload = {
         "input_cost_per_token": 12,
         "output_cost_per_token": 13,
     }
     response = client.put(
-        f"/models/{gpt_4o.name}", json=payload, headers=user.headers()
+        f"/models/{gpt_4o.name}", json=payload, headers=normal_user.headers()
     )
     assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
@@ -349,8 +351,8 @@ def test_delete_model(client, admin_user, gpt_4o):
     assert response.json() is None
 
 
-def test_delete_model_not_admin(client, user, gpt_4o):
-    response = client.delete(f"/models/{gpt_4o.name}", headers=user.headers())
+def test_delete_model_not_admin(client, normal_user, gpt_4o):
+    response = client.delete(f"/models/{gpt_4o.name}", headers=normal_user.headers())
     assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
         "detail": "you need to be an admin to perform this action"

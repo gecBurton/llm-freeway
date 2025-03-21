@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 from sqlmodel import Session
 from starlette import status
 
-from llm_freeway.database import User, UserDB, env, get_account, get_session
+from llm_freeway.database import User, env, get_account, get_session
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -56,26 +56,3 @@ def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]):
             detail="you need to be an admin to perform this action",
         )
     return current_user
-
-
-def create_user_db(
-    username,
-    password,
-    is_admin,
-    tokens_per_minute,
-    session: Annotated[Session, Depends(get_session)],
-) -> UserDB | None:
-    if get_account(username, session):
-        return None
-
-    user_db = UserDB(
-        username=username,
-        is_admin=is_admin,
-        hashed_password=pwd_context.hash(password),
-        tokens_per_minute=tokens_per_minute,
-    )
-
-    session.add(user_db)
-    session.commit()
-    session.refresh(user_db)
-    return user_db

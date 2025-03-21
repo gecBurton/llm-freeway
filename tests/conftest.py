@@ -6,8 +6,8 @@ from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app
-from llm_freeway.auth import create_user_db
-from llm_freeway.database import LLM, EventLog, get_session
+from llm_freeway.auth import pwd_context
+from llm_freeway.database import LLM, EventLog, UserDB, get_session
 from llm_freeway.settings import Settings
 
 env = Settings()
@@ -59,30 +59,44 @@ def admin_user_password():
 
 @pytest.fixture
 def admin_user(session, admin_user_password):
-    usr = create_user_db(
-        "some.one@department.gov.uk", admin_user_password, True, 10_000, session
+    user = UserDB(
+        username="some.one@department.gov.uk",
+        is_admin=True,
+        hashed_password=pwd_context.hash(admin_user_password),
     )
-    yield usr
-    session.delete(usr)
+
+    session.add(user)
+    session.commit()
+
+    yield user
+    session.delete(user)
     session.commit()
 
 
 @pytest.fixture
-def user(session):
-    usr = create_user_db("an.other@department.gov.uk", "admin", False, 1_000, session)
-    yield usr
-    session.delete(usr)
+def normal_user(session):
+    user = UserDB(
+        username="an.other@department.gov.uk",
+        is_admin=False,
+        hashed_password=pwd_context.hash("admin"),
+        tokens_per_minute=1_000,
+    )
+
+    session.add(user)
+    session.commit()
+    yield user
+    session.delete(user)
     session.commit()
 
 
 @pytest.fixture
-def user_with_spend(user, session):
+def user_with_spend(normal_user, session):
     now = datetime.now()
     events = [
         EventLog(
             timestamp=now - timedelta(seconds=seconds),
             response_id="1",
-            user_id=user.id,
+            user_id=normal_user.id,
             model="a-model",
             prompt_tokens=200,
             completion_tokens=100,
@@ -93,19 +107,19 @@ def user_with_spend(user, session):
     for event in events:
         session.add(event)
     session.commit()
-    yield user
+    yield normal_user
     for event in events:
         session.delete(event)
     session.commit()
 
 
 @pytest.fixture
-def user_with_low_rate_high_spend(user, session):
+def user_with_low_rate_high_spend(normal_user, session):
     now = datetime.now()
     event = EventLog(
         timestamp=now - timedelta(seconds=1),
         response_id="1",
-        user_id=user.id,
+        user_id=normal_user.id,
         model="a-model",
         prompt_tokens=200,
         completion_tokens=100,
@@ -113,7 +127,7 @@ def user_with_low_rate_high_spend(user, session):
     )
     session.add(event)
     session.commit()
-    yield user
+    yield normal_user
     session.delete(event)
     session.commit()
 

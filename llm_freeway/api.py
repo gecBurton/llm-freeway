@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from litellm import completion
@@ -14,10 +15,20 @@ from starlette.responses import StreamingResponse
 from llm_freeway.auth import (
     authenticate_user,
     create_user_db,
+    get_admin_user,
     get_current_user,
     pwd_context,
 )
-from llm_freeway.database import LLM, EventLog, Token, User, UserDB, engine, get_session
+from llm_freeway.database import (
+    LLM,
+    EventLog,
+    LLMBase,
+    Token,
+    User,
+    UserDB,
+    engine,
+    get_session,
+)
 
 
 @asynccontextmanager
@@ -181,16 +192,10 @@ class UserRequest(BaseModel):
 
 @app.post(path="/users", tags=["users"])
 def create_user(
-    current_user: Annotated[User, Depends(get_current_user)],
+    admin_user: Annotated[User, Depends(get_admin_user)],
     session: Annotated[Session, Depends(get_session)],
     user: UserRequest,
 ) -> User:
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=400,
-            detail="you need to be an admin to create, update or delete a user",
-        )
-
     user_to_create = UserDB(
         username=user.username,
         is_admin=user.is_admin,
@@ -206,17 +211,11 @@ def create_user(
 
 @app.put(path="/users/{user_id}", tags=["users"])
 def update_user(
-    current_user: Annotated[User, Depends(get_current_user)],
+    admin_user: Annotated[User, Depends(get_admin_user)],
     session: Annotated[Session, Depends(get_session)],
     user_id: UUID,
     user: UserRequest,
 ) -> User:
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=400,
-            detail="you need to be an admin to create, update or delete a user",
-        )
-
     user_to_update: UserDB = session.get(UserDB, user_id)
     if user_to_update is None:
         raise HTTPException(
@@ -237,18 +236,78 @@ def update_user(
 
 @app.delete(path="/users/{user_id}", tags=["users"])
 def delete_user(
-    current_user: Annotated[User, Depends(get_current_user)],
+    admin_user: Annotated[User, Depends(get_admin_user)],
     session: Annotated[Session, Depends(get_session)],
     user_id: UUID,
 ) -> None:
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=400,
-            detail="you need to be an admin to create, update or delete a user",
-        )
-
     user_to_delete: UserDB = session.exec(
         select(UserDB).where(UserDB.id == user_id)
     ).one()
     session.delete(user_to_delete)
     session.commit()
+
+
+class ModelResponse(BaseModel):
+    skip: int
+    limit: int
+    models: list[LLM]
+
+
+@app.get(path="/models", tags=["models"])
+def get_models(
+    session: Annotated[Session, Depends(get_session)],
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, gt=0),
+) -> ModelResponse:
+    models = session.exec(select(LLM).offset(skip).limit(limit)).all()
+
+    return ModelResponse(skip=skip, limit=limit, models=models)
+
+
+@app.post(path="/models", tags=["models"])
+def create_model(
+    admin_user: Annotated[User, Depends(get_admin_user)],
+    session: Annotated[Session, Depends(get_session)],
+    model: LLM,
+) -> LLM:
+    session.add(model)
+    session.commit()
+    session.refresh(model)
+    return model
+
+
+@app.put(path="/models/{name}", tags=["models"])
+def update_model(
+    admin_user: Annotated[User, Depends(get_admin_user)],
+    session: Annotated[Session, Depends(get_session)],
+    name: str,
+    model: LLMBase,
+) -> LLM:
+    llm = session.get(LLM, name)
+    if llm is None:
+        raise HTTPException(
+            status_code=httpx.codes.NOT_FOUND,
+            detail="model does not exist",
+        )
+    llm.input_cost_per_token = model.input_cost_per_token
+    llm.output_cost_per_token = model.output_cost_per_token
+    session.add(llm)
+    session.commit()
+    session.refresh(llm)
+    return llm
+
+
+@app.delete(path="/models/{name}", tags=["models"])
+def delete_model(
+    admin_user: Annotated[User, Depends(get_admin_user)],
+    session: Annotated[Session, Depends(get_session)],
+    name: str,
+) -> None:
+    if llm := session.get(LLM, name):
+        session.delete(llm)
+        session.commit()
+        return None
+    raise HTTPException(
+        status_code=httpx.codes.NOT_FOUND,
+        detail="model does not exist",
+    )

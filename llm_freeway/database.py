@@ -95,10 +95,13 @@ class UserDB(User, table=True):
     hashed_password: str
 
 
-class LLM(SQLModel, table=True):
-    name: str = Field(primary_key=True)
+class LLMBase(SQLModel):
     input_cost_per_token: float
     output_cost_per_token: float
+
+
+class LLM(LLMBase, table=True):
+    name: str = Field(primary_key=True)
 
     def compute_cost_usd(self, model_response: ModelResponse) -> float:
         return (

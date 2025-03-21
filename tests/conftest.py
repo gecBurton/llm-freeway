@@ -118,9 +118,19 @@ def user_with_low_rate_high_spend(user, session):
     session.commit()
 
 
-@pytest.fixture(autouse=True)
-def gpt(session):
-    llm = LLM(name="got-4o", input_cost_per_token=0.1, output_cost_per_token=0.2)
+@pytest.fixture
+def gpt_4o(session):
+    llm = LLM(name="gpt-4o", input_cost_per_token=0.1, output_cost_per_token=0.2)
+    session.add(llm)
+    session.commit()
+    session.refresh(llm)
+    yield llm
+    session.delete(llm)
+
+
+@pytest.fixture
+def gpt_4o_mini(session):
+    llm = LLM(name="gpt-4o-mini", input_cost_per_token=0.1, output_cost_per_token=0.2)
     session.add(llm)
     session.commit()
     session.refresh(llm)

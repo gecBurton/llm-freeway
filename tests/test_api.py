@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -16,7 +17,7 @@ async def test_chat_completions(client, payload, admin_user):
         headers=admin_user.headers(),
     )
 
-    assert response.status_code == 200
+    assert response.status_code == httpx.codes.OK
     response_json = response.json()
     assert response_json["choices"] == [
         {
@@ -46,7 +47,7 @@ async def test_chat_completions(client, payload, admin_user):
         headers=admin_user.headers(),
     )
 
-    assert log_response.status_code == 200
+    assert log_response.status_code == httpx.codes.OK
     log_response_json = log_response.json()["logs"]
     assert isinstance(log_response_json, list)
     assert len(log_response_json) == 1
@@ -66,7 +67,7 @@ async def test_chat_completions_too_many_requests(client, payload, user_with_spe
         headers=user_with_spend.headers(),
     )
 
-    assert response.status_code == 429
+    assert response.status_code == httpx.codes.TOO_MANY_REQUESTS
     assert response.json() == {"detail": "tokens_per_minute=18000 exceeded limit=1000"}
 
 
@@ -80,7 +81,7 @@ async def test_chat_completions_too_much_usd(
         headers=user_with_low_rate_high_spend.headers(),
     )
 
-    assert response.status_code == 429
+    assert response.status_code == httpx.codes.TOO_MANY_REQUESTS
     assert response.json() == {
         "detail": "cost_usd_per_month exceeded=1000.0 exceeded limit=10"
     }
@@ -131,7 +132,7 @@ async def test_chat_completions_streaming(get_session_override, payload, admin_u
         headers=admin_user.headers(),
     )
 
-    assert log_response.status_code == 200
+    assert log_response.status_code == httpx.codes.OK
     log_response_json = log_response.json()["logs"]
     assert isinstance(log_response_json, list)
     assert len(log_response_json) == 1
@@ -146,7 +147,7 @@ async def test_chat_completions_streaming(get_session_override, payload, admin_u
 def test_get_users(client, admin_user, user):
     response = client.get("/users", headers=user.headers())
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == httpx.codes.OK
     response_json = response.json()
 
     users = response_json["users"]
@@ -157,7 +158,7 @@ def test_get_users(client, admin_user, user):
 def test_get_users_not_admin(client, admin_user, user):
     response = client.get("/users", headers=admin_user.headers())
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == httpx.codes.OK
     response_json = response.json()
 
     users = response_json["users"]
@@ -169,7 +170,7 @@ def test_create_user(client, admin_user):
 
     response = client.post("/users", json=payload, headers=admin_user.headers())
 
-    assert response.status_code == 200
+    assert response.status_code == httpx.codes.OK
     response_json = response.json()
 
     assert not response_json["is_admin"]
@@ -181,9 +182,9 @@ def test_create_user_not_admin(client, user):
 
     response = client.post("/users", json=payload, headers=user.headers())
 
-    assert response.status_code == 400
+    assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
-        "detail": "you need to be an admin to create, update or delete a user"
+        "detail": "you need to be an admin to perform this action"
     }
 
 
@@ -194,7 +195,7 @@ def test_update_user(client, admin_user, user):
         f"/users/{user.id}", json=payload, headers=admin_user.headers()
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == httpx.codes.OK
     response_json = response.json()
 
     assert response_json["is_admin"]
@@ -206,9 +207,9 @@ def test_update_user_not_admin(client, user):
 
     response = client.put(f"/users/{user.id}", json=payload, headers=user.headers())
 
-    assert response.status_code == 400
+    assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
-        "detail": "you need to be an admin to create, update or delete a user"
+        "detail": "you need to be an admin to perform this action"
     }
 
 
@@ -221,22 +222,22 @@ def test_update_user_does_not_exist(client, admin_user):
         headers=admin_user.headers(),
     )
 
-    assert response.status_code == 404
+    assert response.status_code == httpx.codes.NOT_FOUND
     assert response.json() == {"detail": "user does not exist"}
 
 
 def test_delete_user(client, admin_user, user):
     response = client.delete(f"/users/{user.id}", headers=admin_user.headers())
 
-    assert response.status_code == 200
+    assert response.status_code == httpx.codes.OK
 
 
 def test_delete_user_not_admin(client, user):
     response = client.delete(f"/users/{user.id}", headers=user.headers())
 
-    assert response.status_code == 400
+    assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.json() == {
-        "detail": "you need to be an admin to create, update or delete a user"
+        "detail": "you need to be an admin to perform this action"
     }
 
 
@@ -246,7 +247,7 @@ def test_token(client, admin_user, admin_user_password):
     response = client.post("/token", data=payload)
     response_json = response.json()
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == httpx.codes.OK
     assert response_json["token_type"] == "bearer"
     token = jwt.decode(
         response_json["access_token"], options={"verify_signature": False}
@@ -260,5 +261,99 @@ def test_token_fail(client, admin_user):
     response = client.post("/token", data=payload)
     response_json = response.json()
 
-    assert response.status_code == 401
+    assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response_json == {"detail": "Incorrect username or password"}
+
+
+def test_get_models(client, gpt_4o, gpt_4o_mini):
+    response = client.get("/models")
+
+    assert response.status_code == httpx.codes.OK
+    expected_response = {
+        "limit": 10,
+        "models": [gpt_4o.model_dump(), gpt_4o_mini.model_dump()],
+        "skip": 0,
+    }
+    assert response.json() == expected_response
+
+
+def test_create_model(client, admin_user):
+    payload = {
+        "input_cost_per_token": 0.1,
+        "name": "gpt-4o-mini",
+        "output_cost_per_token": 0.2,
+    }
+    response = client.post("/models", json=payload, headers=admin_user.headers())
+    assert response.status_code == httpx.codes.OK
+    assert response.json() == payload
+
+
+def test_create_model_not_admin(client, user):
+    payload = {
+        "input_cost_per_token": 0.1,
+        "name": "gpt-4o-mini",
+        "output_cost_per_token": 0.2,
+    }
+    response = client.post("/models", json=payload, headers=user.headers())
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response.json() == {
+        "detail": "you need to be an admin to perform this action"
+    }
+
+
+def test_update_model(client, admin_user, gpt_4o):
+    payload = {
+        "input_cost_per_token": 12,
+        "output_cost_per_token": 13,
+    }
+    response = client.put(
+        f"/models/{gpt_4o.name}", json=payload, headers=admin_user.headers()
+    )
+    assert response.status_code == httpx.codes.OK
+    assert response.json() == dict(payload, name=gpt_4o.name)
+
+
+def test_update_model_not_admin(client, user, gpt_4o):
+    payload = {
+        "input_cost_per_token": 12,
+        "output_cost_per_token": 13,
+    }
+    response = client.put(
+        f"/models/{gpt_4o.name}", json=payload, headers=user.headers()
+    )
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response.json() == {
+        "detail": "you need to be an admin to perform this action"
+    }
+
+
+def test_update_model_does_not_exist(client, admin_user):
+    payload = {
+        "input_cost_per_token": 0.2,
+        "output_cost_per_token": 0.1,
+    }
+    response = client.put(
+        "/models/my-fun-model", json=payload, headers=admin_user.headers()
+    )
+    assert response.status_code == httpx.codes.NOT_FOUND
+    assert response.json() == {"detail": "model does not exist"}
+
+
+def test_delete_model(client, admin_user, gpt_4o):
+    response = client.delete(f"/models/{gpt_4o.name}", headers=admin_user.headers())
+    assert response.status_code == httpx.codes.OK
+    assert response.json() is None
+
+
+def test_delete_model_not_admin(client, user, gpt_4o):
+    response = client.delete(f"/models/{gpt_4o.name}", headers=user.headers())
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response.json() == {
+        "detail": "you need to be an admin to perform this action"
+    }
+
+
+def test_delete_model_does_not_exist(client, admin_user):
+    response = client.delete("/models/my-fun-model", headers=admin_user.headers())
+    assert response.status_code == httpx.codes.NOT_FOUND
+    assert response.json() == {"detail": "model does not exist"}

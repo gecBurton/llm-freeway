@@ -44,9 +44,9 @@ def client(session: Session):
 
 
 @pytest.fixture
-def payload():
+def payload(gpt_4o):
     yield {
-        "model": "azure/gpt-4o",
+        "model": gpt_4o.name,
         "messages": [{"role": "user", "content": "hello :)"}],
         "mock_response": "hello, how can i help you?",
     }
@@ -126,6 +126,7 @@ def gpt_4o(session):
     session.refresh(llm)
     yield llm
     session.delete(llm)
+    session.commit()
 
 
 @pytest.fixture
@@ -136,3 +137,4 @@ def gpt_4o_mini(session):
     session.refresh(llm)
     yield llm
     session.delete(llm)
+    session.commit()

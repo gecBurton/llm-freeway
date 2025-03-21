@@ -81,6 +81,10 @@ async def stream_response(
         )
 
     model = session.get(LLM, body.model)
+    if model is None:
+        raise HTTPException(
+            status_code=httpx.codes.NOT_FOUND, detail="model not registered"
+        )
 
     if not body.stream:
         response = completion(**body.model_dump())

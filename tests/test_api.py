@@ -10,7 +10,7 @@ from llm_freeway.api import app, get_session
 
 
 @pytest.mark.anyio
-async def test_chat_completions(client, payload, admin_user):
+async def test_chat_completions(client, payload, admin_user, gpt_4o):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
@@ -60,7 +60,9 @@ async def test_chat_completions(client, payload, admin_user):
 
 
 @pytest.mark.anyio
-async def test_chat_completions_too_many_requests(client, payload, user_with_spend):
+async def test_chat_completions_too_many_requests(
+    client, payload, user_with_spend, gpt_4o
+):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
@@ -73,7 +75,7 @@ async def test_chat_completions_too_many_requests(client, payload, user_with_spe
 
 @pytest.mark.anyio
 async def test_chat_completions_too_much_usd(
-    client, payload, user_with_low_rate_high_spend
+    client, payload, user_with_low_rate_high_spend, gpt_4o
 ):
     response = client.post(
         "/chat/completions",
@@ -88,7 +90,9 @@ async def test_chat_completions_too_much_usd(
 
 
 @pytest.mark.anyio
-async def test_chat_completions_streaming(get_session_override, payload, admin_user):
+async def test_chat_completions_streaming(
+    get_session_override, payload, admin_user, gpt_4o
+):
     app.dependency_overrides[get_session] = get_session_override
 
     records = []
@@ -138,7 +142,7 @@ async def test_chat_completions_streaming(get_session_override, payload, admin_u
     assert len(log_response_json) == 1
 
     assert log_response_json[0]["response_id"] == response_id[0]
-    assert log_response_json[0]["model"] == "azure/gpt-4o"
+    assert log_response_json[0]["model"] == gpt_4o.name
     assert log_response_json[0]["completion_tokens"] == 8
     assert log_response_json[0]["prompt_tokens"] == 9
     assert log_response_json[0]["user_id"] == str(admin_user.id)

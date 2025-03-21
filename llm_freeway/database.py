@@ -101,7 +101,7 @@ class LLMBase(SQLModel):
 
 
 class LLM(LLMBase, table=True):
-    name: str = Field(primary_key=True)
+    name: str = Field(primary_key=True, description="the litellm-model name")
 
     def compute_cost_usd(self, model_response: ModelResponse) -> float:
         return (
@@ -114,8 +114,8 @@ class EventLog(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     timestamp: datetime = Field(default_factory=datetime.now)
     response_id: str = Field(index=True)
-    user_id: UUID = Field(default=None, foreign_key="userdb.id")
-    model: str = Field()
+    user_id: UUID = Field(foreign_key="userdb.id")
+    model: str = Field(foreign_key="llm.name")
     prompt_tokens: int = Field()
     completion_tokens: int = Field()
     cost_usd: float | None = None

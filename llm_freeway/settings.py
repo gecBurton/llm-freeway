@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    database_url: str
+    database_url: str = "sqlite://"
     secret_key: str = "insecure"
     algorithm: Literal[
         "HS265", "HS256", "ES256", "ES384", "ES512", "ES256K", "RS256", "HS256", "EdDSA"

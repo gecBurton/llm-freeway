@@ -74,7 +74,7 @@ async def stream_response(
     body: ChatRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
-):
+) -> StreamingResponse:
     spend = current_user.get_spend(session)
     if spend.requests > current_user.requests_per_minute:
         raise HTTPException(
@@ -103,36 +103,47 @@ async def stream_response(
         )
 
     if not body.stream:
-        response = completion(**body.model_dump())
+        model_response = completion(**body.model_dump())
         log = EventLog(
             user_id=current_user.id,
             model=model.name,
-            response_id=response.id,
-            prompt_tokens=response.usage["prompt_tokens"],
-            completion_tokens=response.usage["completion_tokens"],
-            cost_usd=model.compute_cost_usd(response) if model else None,
+            response_id=model_response.id,
+            prompt_tokens=model_response.usage["prompt_tokens"],
+            completion_tokens=model_response.usage["completion_tokens"],
+            cost_usd=model_response.usage["prompt_tokens"] * model.input_cost_per_token
+            + model_response.usage["completion_tokens"] * model.output_cost_per_token,
         )
         session.add(log)
         session.commit()
-        return response
+        return model_response
 
     async def event_generator():
-        _response = completion(
+        stream_wrapper = completion(
             stream_options={"include_usage": True}, **body.model_dump()
         )
-        for part in _response:
+        prompt_tokens = 0
+        completion_tokens = 0
+        for part in stream_wrapper:
             if hasattr(part, "usage"):
-                _log = EventLog(
-                    user_id=current_user.id,
-                    model=model.name,
-                    response_id=part.id,
-                    prompt_tokens=part.usage["prompt_tokens"],
-                    completion_tokens=part.usage["completion_tokens"],
-                    cost_usd=model.compute_cost_usd(part) if model else None,
-                )
-                session.add(_log)
+                prompt_tokens += part.usage["prompt_tokens"]
+                completion_tokens += part.usage["completion_tokens"]
             yield f"data: {part.model_dump_json()}\n\n"
         yield "data: [DONE]\n\n"
+
+        cost_usd = (
+            prompt_tokens * model.input_cost_per_token
+            + completion_tokens * model.output_cost_per_token
+        )
+
+        _log = EventLog(
+            user_id=current_user.id,
+            model=model.name,
+            response_id=stream_wrapper.response_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost_usd,
+        )
+        session.add(_log)
         session.commit()
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")

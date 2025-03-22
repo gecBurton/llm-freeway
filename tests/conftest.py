@@ -92,14 +92,14 @@ def normal_user(session):
 
 
 @pytest.fixture
-def user_with_spend(normal_user, session):
+def user_with_spend(normal_user, session, gpt_4o):
     now = datetime.now()
     events = [
         EventLog(
             timestamp=now - timedelta(seconds=seconds),
             response_id="1",
             user_id=normal_user.id,
-            model="a-model",
+            model=gpt_4o.name,
             prompt_tokens=200,
             completion_tokens=100,
             cost_usd=0.1,
@@ -116,13 +116,37 @@ def user_with_spend(normal_user, session):
 
 
 @pytest.fixture
-def user_with_low_rate_high_spend(normal_user, session):
+def user_with_high_rate_low_spend(normal_user, session, gpt_4o):
+    now = datetime.now()
+    events = [
+        EventLog(
+            timestamp=now,
+            response_id="1",
+            user_id=normal_user.id,
+            model=gpt_4o.name,
+            prompt_tokens=0,
+            completion_tokens=0,
+            cost_usd=0,
+        )
+        for _ in range(100)
+    ]
+    for event in events:
+        session.add(event)
+    session.commit()
+    yield normal_user
+    for event in events:
+        session.delete(event)
+    session.commit()
+
+
+@pytest.fixture
+def user_with_low_rate_high_spend(normal_user, session, gpt_4o):
     now = datetime.now()
     event = EventLog(
         timestamp=now - timedelta(seconds=1),
         response_id="1",
         user_id=normal_user.id,
-        model="a-model",
+        model=gpt_4o.name,
         prompt_tokens=200,
         completion_tokens=100,
         cost_usd=1_000,

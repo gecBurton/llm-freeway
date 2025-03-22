@@ -9,8 +9,7 @@ from starlette.testclient import TestClient
 from llm_freeway.api import app, get_session
 
 
-@pytest.mark.anyio
-async def test_chat_completions(client, payload, admin_user, gpt_4o):
+def test_chat_completions(client, payload, admin_user, gpt_4o):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
@@ -59,10 +58,20 @@ async def test_chat_completions(client, payload, admin_user, gpt_4o):
     assert log_response_json[0]["user_id"] == str(admin_user.id)
 
 
-@pytest.mark.anyio
-async def test_chat_completions_too_many_requests(
-    client, payload, user_with_spend, gpt_4o
+def test_chat_completions_too_many_requests(
+    client, payload, user_with_high_rate_low_spend, gpt_4o
 ):
+    response = client.post(
+        "/chat/completions",
+        json=dict(payload, stream=False),
+        headers=user_with_high_rate_low_spend.headers(),
+    )
+
+    assert response.status_code == httpx.codes.TOO_MANY_REQUESTS
+    assert response.json() == {"detail": "requests_per_minute=100 exceeded limit=60"}
+
+
+def test_chat_completions_too_many_tokens(client, payload, user_with_spend, gpt_4o):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
@@ -73,8 +82,17 @@ async def test_chat_completions_too_many_requests(
     assert response.json() == {"detail": "tokens_per_minute=18000 exceeded limit=1000"}
 
 
-@pytest.mark.anyio
-async def test_chat_completions_too_much_usd(
+def test_chat_completions_not_authenticated(client, payload, user_with_spend, gpt_4o):
+    response = client.post(
+        "/chat/completions",
+        json=dict(payload, stream=False),
+    )
+
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_chat_completions_too_much_usd(
     client, payload, user_with_low_rate_high_spend, gpt_4o
 ):
     response = client.post(
@@ -87,6 +105,17 @@ async def test_chat_completions_too_much_usd(
     assert response.json() == {
         "detail": "cost_usd_per_month exceeded=1000.0 exceeded limit=10"
     }
+
+
+def test_chat_completions_model_doesnt_exist(client, payload, admin_user, gpt_4o):
+    response = client.post(
+        "/chat/completions",
+        json=dict(payload, stream=False, model="my-model"),
+        headers=admin_user.headers(),
+    )
+
+    assert response.status_code == httpx.codes.NOT_FOUND
+    assert response.json() == {"detail": "model=my-model not registered"}
 
 
 @pytest.mark.anyio

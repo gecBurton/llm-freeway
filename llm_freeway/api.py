@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from litellm import completion
@@ -30,6 +31,8 @@ from llm_freeway.database import (
     get_user,
 )
 from llm_freeway.settings import env
+
+load_dotenv()
 
 
 @asynccontextmanager
@@ -95,14 +98,15 @@ async def stream_response(
     model = session.get(LLM, body.model)
     if model is None:
         raise HTTPException(
-            status_code=httpx.codes.NOT_FOUND, detail="model not registered"
+            status_code=httpx.codes.NOT_FOUND,
+            detail=f"model={body.model} not registered",
         )
 
     if not body.stream:
         response = completion(**body.model_dump())
         log = EventLog(
             user_id=current_user.id,
-            model=response.model,
+            model=model.name,
             response_id=response.id,
             prompt_tokens=response.usage["prompt_tokens"],
             completion_tokens=response.usage["completion_tokens"],
@@ -120,7 +124,7 @@ async def stream_response(
             if hasattr(part, "usage"):
                 _log = EventLog(
                     user_id=current_user.id,
-                    model=part.model,
+                    model=model.name,
                     response_id=part.id,
                     prompt_tokens=part.usage["prompt_tokens"],
                     completion_tokens=part.usage["completion_tokens"],

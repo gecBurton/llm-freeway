@@ -25,4 +25,4 @@ llm-freeway is a simple, secure and open-source proxy server for litellm.
 ## how to run
 
 * locally, using sqlite `make web`
-* via docker
+* via docker `docker compose up web`

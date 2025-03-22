@@ -27,6 +27,7 @@ from llm_freeway.database import (
     UserDB,
     engine,
     get_session,
+    get_user,
 )
 from llm_freeway.settings import env
 
@@ -36,12 +37,16 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
     if env.temp_admin_password:
         with Session(engine) as session:
-            user_db = UserDB(
-                username="admin",
-                is_admin=True,
-                hashed_password=pwd_context.hash(env.temp_admin_password),
-            )
-            session.add(user_db)
+            if user := get_user("admin", session):
+                user.is_admin = True
+                user.hashed_password = pwd_context.hash(env.temp_admin_password)
+            else:
+                user = UserDB(
+                    username="admin",
+                    is_admin=True,
+                    hashed_password=pwd_context.hash(env.temp_admin_password),
+                )
+            session.add(user)
             session.commit()
     yield
 

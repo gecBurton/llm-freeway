@@ -136,6 +136,8 @@ async def stream_response(
 
 class EventLogResponse(BaseModel):
     logs: list[EventLog]
+    skip: int = (Query(0, ge=0),)
+    limit: int = (Query(10, gt=0),)
 
 
 @app.get(path="/spend/logs")

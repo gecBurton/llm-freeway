@@ -11,8 +11,11 @@ from sqlmodel import Field, Session, SQLModel, select
 
 from llm_freeway.settings import env
 
-connect_args = {"check_same_thread": False}
-engine = create_engine(env.sqlite_url, connect_args=connect_args)
+if env.database_url.startswith("sqlite://"):
+    connect_args = {"check_same_thread": False}
+    engine = create_engine(env.database_url, connect_args=connect_args)
+else:
+    engine = create_engine(env.database_url)
 
 
 class Token(BaseModel):
@@ -121,7 +124,7 @@ class EventLog(SQLModel, table=True):
     cost_usd: float | None = None
 
 
-def get_account(
+def get_user(
     username: str, session: Annotated[Session, Depends(get_session)]
 ) -> UserDB:
     return session.exec(select(UserDB).where(UserDB.username == username)).first()

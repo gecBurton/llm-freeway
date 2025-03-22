@@ -1,0 +1,23 @@
+services:
+
+  postgres:
+    image: postgres:17
+    ports:
+      - '5432:5432'
+    env_file: .env
+    restart: always
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data:Z
+
+  web:
+    build:
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+    env_file: .env
+    ports:
+      - "8000:8000"
+
+
+volumes:
+  local_postgres_data: {}

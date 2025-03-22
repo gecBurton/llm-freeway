@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 from sqlmodel import Session
 from starlette import status
 
-from llm_freeway.database import User, env, get_account, get_session
+from llm_freeway.database import User, env, get_session, get_user
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -19,7 +19,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def authenticate_user(
     username: str, password: str, session: Annotated[Session, Depends(get_session)]
 ) -> User | None:
-    user = get_account(username, session)
+    user = get_user(username, session)
     if not user:
         return None
     if not pwd_context.verify(password, user.hashed_password):
@@ -43,7 +43,7 @@ async def get_current_user(
             raise credentials_exception
     except InvalidTokenError:
         raise credentials_exception
-    user = get_account(username=username, session=session)
+    user = get_user(username=username, session=session)
     if user is None:
         raise credentials_exception
     return user

@@ -150,9 +150,9 @@ async def stream_response(
 
 
 class EventLogResponse(BaseModel):
-    logs: list[EventLog]
-    skip: int = (Query(0, ge=0),)
-    limit: int = (Query(10, gt=0),)
+    items: list[EventLog]
+    page: int
+    size: int
 
 
 @app.get(path="/spend/logs")
@@ -163,8 +163,8 @@ def spend_logs(
     response_id: str | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, gt=0),
+    page: int = Query(1, ge=0),
+    size: int = Query(10, gt=0),
 ) -> EventLogResponse:
     query = select(EventLog)
     if not current_user.is_admin:
@@ -177,8 +177,12 @@ def spend_logs(
         query = query.where(EventLog.timestamp >= start_date)
     if end_date:
         query = query.where(EventLog.timestamp < end_date)
-    logs = session.exec(query.offset(skip).limit(limit)).all()
-    return EventLogResponse(logs=logs, skip=skip, limit=limit)
+
+    skip = size * (page - 1)
+    items = session.exec(
+        query.order_by(EventLog.timestamp).offset(skip).limit(size)
+    ).all()
+    return EventLogResponse(items=items, page=page, size=size)
 
 
 @app.post("/token")
@@ -197,24 +201,25 @@ def login_for_access_token(
 
 
 class UserResponse(BaseModel):
-    skip: int
-    limit: int
-    users: list[User]
+    page: int
+    size: int
+    items: list[User]
 
 
 @app.get(path="/users", tags=["users"])
 def get_users(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, gt=0),
+    page: int = Query(1, ge=0),
+    size: int = Query(10, gt=0),
 ) -> UserResponse:
     if not current_user.is_admin:
-        users = [current_user]
+        data = [current_user]
     else:
-        users = session.exec(select(UserDB).offset(skip).limit(limit)).all()
+        skip = (page - 1) * size
+        data = session.exec(select(UserDB).offset(skip).limit(size)).all()
 
-    return UserResponse(skip=skip, limit=limit, users=users)
+    return UserResponse(page=page, size=size, items=data)
 
 
 class UserRequest(BaseModel):
@@ -281,20 +286,20 @@ def delete_user(
 
 
 class ModelResponse(BaseModel):
-    skip: int
-    limit: int
-    models: list[LLM]
+    page: int
+    size: int
+    items: list[LLM]
 
 
 @app.get(path="/models", tags=["models"])
 def get_models(
     session: Annotated[Session, Depends(get_session)],
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, gt=0),
+    page: int = Query(1, ge=0),
+    size: int = Query(10, gt=0),
 ) -> ModelResponse:
-    models = session.exec(select(LLM).offset(skip).limit(limit)).all()
-
-    return ModelResponse(skip=skip, limit=limit, models=models)
+    skip = size * (page - 1)
+    models = session.exec(select(LLM).offset(skip).limit(size)).all()
+    return ModelResponse(size=size, page=page, items=models)
 
 
 @app.post(path="/models", tags=["models"])

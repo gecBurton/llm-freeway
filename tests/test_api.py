@@ -47,7 +47,7 @@ def test_chat_completions(client, payload, admin_user, gpt_4o):
     )
 
     assert log_response.status_code == httpx.codes.OK
-    log_response_json = log_response.json()["logs"]
+    log_response_json = log_response.json()["items"]
     assert isinstance(log_response_json, list)
     assert len(log_response_json) == 1
 
@@ -166,7 +166,7 @@ async def test_chat_completions_streaming(
     )
 
     assert log_response.status_code == httpx.codes.OK
-    log_response_json = log_response.json()["logs"]
+    log_response_json = log_response.json()["items"]
     assert isinstance(log_response_json, list)
     assert len(log_response_json) == 1
 
@@ -183,7 +183,7 @@ def test_get_users(client, admin_user, normal_user):
     assert response.status_code == httpx.codes.OK
     response_json = response.json()
 
-    users = response_json["users"]
+    users = response_json["items"]
     assert len(users) == 1
     assert users[0]["id"] == str(normal_user.id)
 
@@ -194,7 +194,7 @@ def test_get_users_not_admin(client, admin_user, normal_user):
     assert response.status_code == httpx.codes.OK
     response_json = response.json()
 
-    users = response_json["users"]
+    users = response_json["items"]
     assert len(users) == 2
 
 
@@ -305,9 +305,9 @@ def test_get_models(client, gpt_4o, gpt_4o_mini):
 
     assert response.status_code == httpx.codes.OK
     expected_response = {
-        "limit": 10,
-        "models": [gpt_4o.model_dump(), gpt_4o_mini.model_dump()],
-        "skip": 0,
+        "size": 10,
+        "items": [gpt_4o.model_dump(), gpt_4o_mini.model_dump()],
+        "page": 1,
     }
     assert response.json() == expected_response
 

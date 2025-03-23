@@ -106,7 +106,7 @@ async def stream_response(
     vertex_credentials = os.getenv("VERTEX_CREDENTIALS", None)
 
     if not body.stream:
-        model_response = completion(**body.model_dump())
+        model_response = completion(vertex_credentials=vertex_credentials, **body.model_dump())
         log = EventLog(
             user_id=current_user.id,
             model=model.name,

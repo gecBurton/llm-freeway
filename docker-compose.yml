@@ -9,6 +9,15 @@ services:
     volumes:
       - local_postgres_data:/var/lib/postgresql/data:Z
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.4
+    ports:
+      - '8080:8080'
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+    command: start-dev
+
   web:
     build:
       dockerfile: Dockerfile

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytest
+from keycloak import KeycloakAdmin, KeycloakOpenID, KeycloakOpenIDConnection
 from sqlalchemy import StaticPool, create_engine
 from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
@@ -9,6 +10,30 @@ from llm_freeway.api import app
 from llm_freeway.auth import pwd_context
 from llm_freeway.database import LLM, EventLog, UserDB, get_session
 from llm_freeway.settings import Settings
+
+
+@pytest.fixture
+def keycloak_openid() -> KeycloakOpenID:
+    return KeycloakOpenID(
+        server_url="http://localhost:8080/",
+        client_id="example_client",
+        realm_name="master",
+        client_secret_key="secret",
+    )
+
+
+@pytest.fixture
+def keycloak_admin(keycloak_openid):
+    keycloak_connection = KeycloakOpenIDConnection(
+        server_url="http://localhost:8080/",
+        username="admin",
+        password="admin",
+        realm_name=keycloak_openid.realm_name,
+        client_secret_key=keycloak_openid.client_secret_key,
+        verify=True,
+    )
+    return KeycloakAdmin(connection=keycloak_connection)
+
 
 env = Settings()
 
@@ -60,9 +85,33 @@ def admin_user_password():
 
 
 @pytest.fixture
-def admin_user(session, admin_user_password):
+def admin_user(session, admin_user_password, keycloak_admin):
+    username = "some.one@department.gov.uk"
+    new_user_id = keycloak_admin.create_user(
+        {
+            "email": username,
+            "username": username,
+            "enabled": True,
+            "firstName": "some",
+            "lastName": "one",
+            "credentials": [
+                {
+                    "value": "secret",
+                    "type": admin_user_password,
+                }
+            ],
+            "attributes": {
+                "is_admin": True,
+                "requests_per_minute": 60,
+                "tokens_per_minute": 100_000,
+                "cost_usd_per_month": 10,
+            },
+        },
+        exist_ok=True,
+    )
+
     user = UserDB(
-        username="some.one@department.gov.uk",
+        username=username,
         is_admin=True,
         hashed_password=pwd_context.hash(admin_user_password),
     )
@@ -74,9 +123,11 @@ def admin_user(session, admin_user_password):
     session.delete(user)
     session.commit()
 
+    keycloak_admin.delete_user(user_id=new_user_id)
+
 
 @pytest.fixture
-def normal_user(session):
+def normal_user(session, keycloak_admin, admin_user_password):
     user = UserDB(
         username="an.other@department.gov.uk",
         is_admin=False,
@@ -84,11 +135,36 @@ def normal_user(session):
         tokens_per_minute=1_000,
     )
 
+    username = "an.other@department.gov.uk"
+    new_user_id = keycloak_admin.create_user(
+        {
+            "email": username,
+            "username": username,
+            "enabled": True,
+            "firstName": "some",
+            "lastName": "one",
+            "credentials": [
+                {
+                    "value": "secret",
+                    "type": admin_user_password,
+                }
+            ],
+            "attributes": {
+                "is_admin": False,
+                "requests_per_minute": 60,
+                "tokens_per_minute": 1_000,
+                "cost_usd_per_month": 10,
+            },
+        },
+        exist_ok=True,
+    )
+
     session.add(user)
     session.commit()
     yield user
     session.delete(user)
     session.commit()
+    keycloak_admin.delete_user(user_id=new_user_id)
 
 
 @pytest.fixture

@@ -110,7 +110,7 @@ class EventLog(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     timestamp: datetime = Field(default_factory=datetime.now)
     response_id: str = Field(index=True)
-    user_id: UUID = Field(foreign_key="userdb.id")
+    user_id: UUID = Field()
     model: str = Field(foreign_key="llm.name")
     prompt_tokens: int = Field()
     completion_tokens: int = Field()

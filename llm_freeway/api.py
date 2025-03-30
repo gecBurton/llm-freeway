@@ -106,7 +106,9 @@ async def stream_response(
     vertex_credentials = os.getenv("VERTEX_CREDENTIALS", None)
 
     if not body.stream:
-        model_response = completion(vertex_credentials=vertex_credentials, **body.model_dump())
+        model_response = completion(
+            vertex_credentials=vertex_credentials, **body.model_dump()
+        )
         log = EventLog(
             user_id=current_user.id,
             model=model.name,
@@ -122,7 +124,9 @@ async def stream_response(
 
     async def event_generator():
         stream_wrapper = completion(
-            vertex_credentials=vertex_credentials, stream_options={"include_usage": True}, **body.model_dump()
+            vertex_credentials=vertex_credentials,
+            stream_options={"include_usage": True},
+            **body.model_dump(),
         )
         prompt_tokens = 0
         completion_tokens = 0

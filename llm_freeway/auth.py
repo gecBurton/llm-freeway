@@ -2,6 +2,7 @@ from typing import Annotated
 
 import httpx
 import jwt
+import requests
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jwt import InvalidTokenError
@@ -27,26 +28,40 @@ def authenticate_user(
     return user
 
 
+def get_public_key():
+    public_key_url = f"{env.keycloak_server_url}/realms/{env.keycloak_realm_name}/protocol/openid-connect/certs"
+
+    # Get the public keys
+    response = requests.get(public_key_url)
+    jwks = response.json()
+
+    # Extract the public key (you may need to adjust this for multiple keys)
+    key = jwks["keys"][0]  # Assume the first key in the list for simplicity
+    n = key["n"]
+    e = key["e"]
+    alg = key["alg"]
+
+    # Construct the public key for verification
+    return f"-----BEGIN PUBLIC KEY-----\n{n}\n{e}\n-----END PUBLIC KEY-----", alg
+
+
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    session: Annotated[Session, Depends(get_session)],
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    public_key, alg = get_public_key()
     try:
-        payload = jwt.decode(token, env.secret_key, algorithms=[env.algorithm])
-        username = payload.get("sub")
-        if username is None:
-            raise credentials_exception
+        payload = jwt.decode(token, options={"verify_signature": False})
+        # payload = jwt.decode(token, public_key, algorithms=[alg])
     except InvalidTokenError:
         raise credentials_exception
-    user = get_user(username=username, session=session)
-    if user is None:
-        raise credentials_exception
-    return user
+    if username := payload.get("sub"):
+        return User(username=username)
+    raise credentials_exception
 
 
 def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]):

@@ -2,12 +2,10 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Annotated, Literal
-from uuid import UUID
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.security import OAuth2PasswordRequestForm
 from litellm import completion
 from pydantic import BaseModel, Field
 from sqlmodel import Session, SQLModel, select
@@ -15,18 +13,13 @@ from starlette import status
 from starlette.responses import StreamingResponse
 
 from llm_freeway.auth import (
-    authenticate_user,
-    get_admin_user,
     get_current_user,
     pwd_context,
 )
 from llm_freeway.database import (
     LLM,
     EventLog,
-    LLMBase,
-    Token,
     User,
-    UserDB,
     engine,
     get_session,
     get_user,
@@ -45,7 +38,7 @@ async def lifespan(app: FastAPI):
                 user.is_admin = True
                 user.hashed_password = pwd_context.hash(env.temp_admin_password)
             else:
-                user = UserDB(
+                user = User(
                     username="admin",
                     is_admin=True,
                     hashed_password=pwd_context.hash(env.temp_admin_password),
@@ -190,169 +183,3 @@ def spend_logs(
         query.order_by(EventLog.timestamp).offset(skip).limit(size)
     ).all()
     return EventLogResponse(items=items, page=page, size=size)
-
-
-@app.post("/token")
-def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    session: Annotated[Session, Depends(get_session)],
-) -> Token:
-    user = authenticate_user(form_data.username, form_data.password, session)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return Token(access_token=user.get_token(), token_type="bearer")
-
-
-class UserResponse(BaseModel):
-    page: int
-    size: int
-    items: list[User]
-
-
-@app.get(path="/users", tags=["users"])
-def get_users(
-    current_user: Annotated[User, Depends(get_current_user)],
-    session: Annotated[Session, Depends(get_session)],
-    page: int = Query(1, ge=0),
-    size: int = Query(10, gt=0),
-) -> UserResponse:
-    if not current_user.is_admin:
-        data = [current_user]
-    else:
-        skip = (page - 1) * size
-        data = session.exec(select(UserDB).offset(skip).limit(size)).all()
-
-    return UserResponse(page=page, size=size, items=data)
-
-
-class UserRequest(BaseModel):
-    username: str
-    password: str
-    is_admin: bool = False
-
-
-@app.post(path="/users", tags=["users"])
-def create_user(
-    admin_user: Annotated[User, Depends(get_admin_user)],
-    session: Annotated[Session, Depends(get_session)],
-    user: UserRequest,
-) -> User:
-    user_to_create = UserDB(
-        username=user.username,
-        is_admin=user.is_admin,
-        hashed_password=pwd_context.hash(user.password),
-    )
-
-    session.add(user_to_create)
-    session.commit()
-    session.refresh(user_to_create)
-
-    return user_to_create
-
-
-@app.put(path="/users/{user_id}", tags=["users"])
-def update_user(
-    admin_user: Annotated[User, Depends(get_admin_user)],
-    session: Annotated[Session, Depends(get_session)],
-    user_id: UUID,
-    user: UserRequest,
-) -> User:
-    user_to_update: UserDB = session.get(UserDB, user_id)
-    if user_to_update is None:
-        raise HTTPException(
-            status_code=404,
-            detail="user does not exist",
-        )
-
-    user_to_update.username = user.username
-    user_to_update.hashed_password = pwd_context.hash(user.password)
-    user_to_update.is_admin = user.is_admin
-
-    session.add(user_to_update)
-    session.commit()
-    session.refresh(user_to_update)
-
-    return user_to_update
-
-
-@app.delete(path="/users/{user_id}", tags=["users"])
-def delete_user(
-    admin_user: Annotated[User, Depends(get_admin_user)],
-    session: Annotated[Session, Depends(get_session)],
-    user_id: UUID,
-) -> None:
-    user_to_delete: UserDB = session.exec(
-        select(UserDB).where(UserDB.id == user_id)
-    ).one()
-    session.delete(user_to_delete)
-    session.commit()
-
-
-class ModelResponse(BaseModel):
-    page: int
-    size: int
-    items: list[LLM]
-
-
-@app.get(path="/models", tags=["models"])
-def get_models(
-    session: Annotated[Session, Depends(get_session)],
-    page: int = Query(1, ge=0),
-    size: int = Query(10, gt=0),
-) -> ModelResponse:
-    skip = size * (page - 1)
-    models = session.exec(select(LLM).offset(skip).limit(size)).all()
-    return ModelResponse(size=size, page=page, items=models)
-
-
-@app.post(path="/models", tags=["models"])
-def create_model(
-    admin_user: Annotated[User, Depends(get_admin_user)],
-    session: Annotated[Session, Depends(get_session)],
-    model: LLM,
-) -> LLM:
-    session.add(model)
-    session.commit()
-    session.refresh(model)
-    return model
-
-
-@app.put(path="/models/{name}", tags=["models"])
-def update_model(
-    admin_user: Annotated[User, Depends(get_admin_user)],
-    session: Annotated[Session, Depends(get_session)],
-    name: str,
-    model: LLMBase,
-) -> LLM:
-    llm = session.get(LLM, name)
-    if llm is None:
-        raise HTTPException(
-            status_code=httpx.codes.NOT_FOUND,
-            detail="model does not exist",
-        )
-    llm.input_cost_per_token = model.input_cost_per_token
-    llm.output_cost_per_token = model.output_cost_per_token
-    session.add(llm)
-    session.commit()
-    session.refresh(llm)
-    return llm
-
-
-@app.delete(path="/models/{name}", tags=["models"])
-def delete_model(
-    admin_user: Annotated[User, Depends(get_admin_user)],
-    session: Annotated[Session, Depends(get_session)],
-    name: str,
-) -> None:
-    if llm := session.get(LLM, name):
-        session.delete(llm)
-        session.commit()
-        return None
-    raise HTTPException(
-        status_code=httpx.codes.NOT_FOUND,
-        detail="model does not exist",
-    )

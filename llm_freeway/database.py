@@ -1,9 +1,10 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
-import jwt
+import requests
 from fastapi import Depends
+from keycloak import KeycloakAdmin, KeycloakOpenID, KeycloakOpenIDConnection
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlmodel import Field, Session, SQLModel, select
@@ -22,17 +23,29 @@ class Token(BaseModel):
     token_type: str
 
 
-def create_access_token(data: dict, expires_delta: timedelta) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + expires_delta
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, env.secret_key, algorithm=env.algorithm)
-    return encoded_jwt
-
-
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def get_keycloak_admin() -> KeycloakAdmin:
+    keycloak_openid = KeycloakOpenID(
+        server_url=env.keycloak_server_url,
+        client_id="example_client",
+        realm_name=env.keycloak_realm_name,
+        client_secret_key=env.client_secret_key,
+    )
+
+    keycloak_connection = KeycloakOpenIDConnection(
+        server_url=env.keycloak_server_url,
+        username="admin",
+        password="admin",
+        realm_name=keycloak_openid.realm_name,
+        client_secret_key=keycloak_openid.client_secret_key,
+        verify=True,
+    )
+
+    return KeycloakAdmin(connection=keycloak_connection)
 
 
 class Spend(BaseModel):
@@ -42,20 +55,27 @@ class Spend(BaseModel):
     cost_usd: float | None
 
 
-class User(SQLModel):
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    username: str = Field(unique=True)
+class User(BaseModel):
+    id: UUID | None = Field()
+    username: str = Field()
+    password: str = Field()
     is_admin: bool = False
     requests_per_minute: int = 60
     tokens_per_minute: int = 100_000
     cost_usd_per_month: int = 10
 
     def get_token(self) -> str:
-        access_token_expires = timedelta(minutes=env.access_token_expire_minutes)
-        return create_access_token(
-            data={"sub": self.username},
-            expires_delta=access_token_expires,
-        )
+        data = {
+            "client_id": env.keycloak_client_id,
+            "client_secret": env.client_secret_key,
+            "username": self.username,
+            "password": self.password,
+            "grant_type": "password",
+        }
+        keycloak_url = f"{env.keycloak_server_url}/realms/{env.keycloak_realm_name}/protocol/openid-connect/token"
+        response = requests.post(keycloak_url, data=data)
+        response.raise_for_status()
+        return response.json()["access_token"]
 
     def headers(self) -> dict[str, str]:
         token = self.get_token()
@@ -93,10 +113,6 @@ class User(SQLModel):
         )
 
 
-class UserDB(User, table=True):
-    hashed_password: str
-
-
 class LLMBase(SQLModel):
     input_cost_per_token: float
     output_cost_per_token: float
@@ -118,6 +134,6 @@ class EventLog(SQLModel, table=True):
 
 
 def get_user(
-    username: str, session: Annotated[Session, Depends(get_session)]
-) -> UserDB:
-    return session.exec(select(UserDB).where(UserDB.username == username)).first()
+    username: str, session: Annotated[KeycloakAdmin, Depends(get_keycloak_admin)]
+) -> User:
+    return User(username=username)

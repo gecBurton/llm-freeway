@@ -7,32 +7,96 @@ from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app
-from llm_freeway.auth import pwd_context
-from llm_freeway.database import LLM, EventLog, UserDB, get_session
+from llm_freeway.database import LLM, EventLog, User, get_session
 from llm_freeway.settings import Settings
 
 
 @pytest.fixture
-def keycloak_openid() -> KeycloakOpenID:
+def client_id():
+    return env.keycloak_client_id
+
+
+@pytest.fixture
+def keycloak_openid(client_id) -> KeycloakOpenID:
     return KeycloakOpenID(
-        server_url="http://localhost:8080/",
-        client_id="example_client",
-        realm_name="master",
-        client_secret_key="secret",
+        server_url=env.keycloak_server_url,
+        client_id=client_id,
+        realm_name=env.keycloak_realm_name,
+        client_secret_key=env.client_secret_key,
     )
 
 
 @pytest.fixture
-def keycloak_admin(keycloak_openid):
+def keycloak_admin(keycloak_openid, client_id):
     keycloak_connection = KeycloakOpenIDConnection(
-        server_url="http://localhost:8080/",
+        server_url=env.keycloak_server_url,
         username="admin",
         password="admin",
         realm_name=keycloak_openid.realm_name,
         client_secret_key=keycloak_openid.client_secret_key,
         verify=True,
     )
-    return KeycloakAdmin(connection=keycloak_connection)
+    admin = KeycloakAdmin(connection=keycloak_connection)
+
+    # Fetch the client ID
+    client = admin.get_client_id(client_id)
+    attributes = {
+        "sub": {
+            "type": "string",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+        },
+        "is_admin": {
+            "type": "boolean",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+        },
+        "requests_per_minute": {
+            "type": "integer",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+        },
+        "tokens_per_minute": {
+            "type": "integer",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+        },
+        "cost_usd_per_month": {
+            "type": "integer",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+        },
+    }
+
+    existing_mappers = admin.get_mappers_from_client(client_id=client)
+    for mapper in existing_mappers:
+        admin.remove_client_mapper(client_id=client, client_mapper_id=mapper["id"])
+
+    for attr, config in attributes.items():
+        mapper = {
+            "name": f"{attr} Mapper",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-property-mapper",
+            "consentRequired": False,
+            "config": {
+                "user.property": attr,
+                "id.token.claim": config["id.token.claim"],
+                "access.token.claim": config["access.token.claim"],
+                "claim.name": attr,
+                "jsonType.label": config["type"],
+            },
+        }
+        # Create the mapper
+        admin.add_mapper_to_client(client_id=client, payload=mapper)
+
+    # {
+    #     "protocolMapper": "oidc-usermodel-property-mapper",
+    #     "config": {
+    #         "user.attribute": "username",
+    #         "id.token.claim": "true",
+    #     }
+    # }
+    return admin
 
 
 env = Settings()
@@ -85,7 +149,9 @@ def admin_user_password():
 
 
 @pytest.fixture
-def admin_user(session, admin_user_password, keycloak_admin):
+def admin_user(
+    session, admin_user_password, keycloak_admin, keycloak_openid, client_id
+):
     username = "some.one@department.gov.uk"
     new_user_id = keycloak_admin.create_user(
         {
@@ -96,8 +162,9 @@ def admin_user(session, admin_user_password, keycloak_admin):
             "lastName": "one",
             "credentials": [
                 {
-                    "value": "secret",
-                    "type": admin_user_password,
+                    "type": "password",
+                    "value": admin_user_password,
+                    "temporary": False,
                 }
             ],
             "attributes": {
@@ -110,31 +177,23 @@ def admin_user(session, admin_user_password, keycloak_admin):
         exist_ok=True,
     )
 
-    user = UserDB(
+    user = User(
+        id=new_user_id,
         username=username,
+        password=admin_user_password,
         is_admin=True,
-        hashed_password=pwd_context.hash(admin_user_password),
+        requests_per_minute=60,
+        tokens_per_minute=100_000,
+        cost_usd_per_month=10,
     )
 
-    session.add(user)
-    session.commit()
-
     yield user
-    session.delete(user)
-    session.commit()
 
     keycloak_admin.delete_user(user_id=new_user_id)
 
 
 @pytest.fixture
-def normal_user(session, keycloak_admin, admin_user_password):
-    user = UserDB(
-        username="an.other@department.gov.uk",
-        is_admin=False,
-        hashed_password=pwd_context.hash("admin"),
-        tokens_per_minute=1_000,
-    )
-
+def normal_user(session, keycloak_admin, admin_user_password, keycloak_openid):
     username = "an.other@department.gov.uk"
     new_user_id = keycloak_admin.create_user(
         {
@@ -145,8 +204,9 @@ def normal_user(session, keycloak_admin, admin_user_password):
             "lastName": "one",
             "credentials": [
                 {
-                    "value": "secret",
-                    "type": admin_user_password,
+                    "type": "password",
+                    "value": admin_user_password,
+                    "temporary": False,
                 }
             ],
             "attributes": {
@@ -159,11 +219,17 @@ def normal_user(session, keycloak_admin, admin_user_password):
         exist_ok=True,
     )
 
-    session.add(user)
-    session.commit()
+    user = User(
+        id=new_user_id,
+        username="an.other@department.gov.uk",
+        password=admin_user_password,
+        is_admin=False,
+        requests_per_minute=60,
+        tokens_per_minute=1_000,
+        cost_usd_per_month=10,
+    )
+
     yield user
-    session.delete(user)
-    session.commit()
     keycloak_admin.delete_user(user_id=new_user_id)
 
 

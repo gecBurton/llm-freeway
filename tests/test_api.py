@@ -8,11 +8,11 @@ from starlette.testclient import TestClient
 from llm_freeway.api import app, get_session
 
 
-def test_chat_completions(client, payload, admin_user, gpt_4o):
+def test_chat_completions(client, payload, normal_user, gpt_4o):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
-        headers=admin_user.headers(),
+        headers=normal_user.headers(),
     )
 
     assert response.status_code == httpx.codes.OK
@@ -42,7 +42,7 @@ def test_chat_completions(client, payload, admin_user, gpt_4o):
     log_response = client.get(
         "/spend/logs",
         params=dict(response_id=response_json["id"]),
-        headers=admin_user.headers(),
+        headers=normal_user.headers(),
     )
 
     assert log_response.status_code == httpx.codes.OK
@@ -54,7 +54,7 @@ def test_chat_completions(client, payload, admin_user, gpt_4o):
     assert log_response_json[0]["model"] == "gpt-4o"
     assert log_response_json[0]["completion_tokens"] == 20
     assert log_response_json[0]["prompt_tokens"] == 10
-    # assert log_response_json[0]["user_id"] == str(admin_user.username)
+    assert log_response_json[0]["user_id"] == str(normal_user.id)
 
 
 def test_chat_completions_too_many_requests(
@@ -81,7 +81,7 @@ def test_chat_completions_too_many_tokens(client, payload, user_with_spend, gpt_
     assert response.json() == {"detail": "tokens_per_minute=18000 exceeded limit=1000"}
 
 
-def test_chat_completions_not_authenticated(client, payload, user_with_spend, gpt_4o):
+def test_chat_completions_not_authenticated(client, payload, normal_user, gpt_4o):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
@@ -109,13 +109,13 @@ def test_chat_completions_too_much_usd(
 def test_chat_completions_model_doesnt_exist(
     client,
     payload,
-    admin_user,
+    normal_user,
     gpt_4o,
 ):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False, model="my-model"),
-        headers=admin_user.headers(),
+        headers=normal_user.headers(),
     )
 
     assert response.status_code == httpx.codes.NOT_FOUND
@@ -124,7 +124,7 @@ def test_chat_completions_model_doesnt_exist(
 
 @pytest.mark.anyio
 async def test_chat_completions_streaming(
-    get_session_override, payload, admin_user, gpt_4o
+    get_session_override, payload, normal_user, gpt_4o
 ):
     app.dependency_overrides[get_session] = get_session_override
 
@@ -137,7 +137,7 @@ async def test_chat_completions_streaming(
             "POST",
             "/chat/completions",
             json=dict(payload, stream=True),
-            headers=admin_user.headers(),
+            headers=normal_user.headers(),
         ) as response:
             async for line in response.aiter_lines():
                 if line and line.startswith("data: ") and line != "data: [DONE]":
@@ -166,7 +166,7 @@ async def test_chat_completions_streaming(
     log_response = test_client.get(
         "/spend/logs",
         params=dict(response_id=response_id[0]),
-        headers=admin_user.headers(),
+        headers=normal_user.headers(),
     )
 
     assert log_response.status_code == httpx.codes.OK
@@ -178,4 +178,4 @@ async def test_chat_completions_streaming(
     assert log_response_json[0]["model"] == gpt_4o.name
     assert log_response_json[0]["completion_tokens"] == 8
     assert log_response_json[0]["prompt_tokens"] == 9
-    assert log_response_json[0]["user_id"] == str(admin_user.id)
+    assert log_response_json[0]["user_id"] == str(normal_user.id)

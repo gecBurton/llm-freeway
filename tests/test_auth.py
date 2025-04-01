@@ -8,16 +8,16 @@ from llm_freeway.database import User
 
 
 @pytest.mark.anyio
-async def test_get_current_user(admin_user: User):
-    actual_user = await get_current_user(admin_user.get_token())
-    admin_user.password = None
-    assert actual_user == admin_user
+async def test_get_current_user(normal_user: User):
+    actual_user = await get_current_user(normal_user.get_token())
+    normal_user.password = None
+    assert actual_user == normal_user
 
 
 @pytest.mark.anyio
-async def test_get_current_user_corrupt_token(admin_user: User):
+async def test_get_current_user_corrupt_token(normal_user: User):
     with pytest.raises(HTTPException) as e:
-        await get_current_user(admin_user.get_token() + "!")
+        await get_current_user(normal_user.get_token() + "!")
     assert e.value.status_code == httpx.codes.UNAUTHORIZED
     assert e.value.detail == "Could not validate credentials"
 

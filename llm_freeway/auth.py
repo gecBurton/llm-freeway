@@ -5,14 +5,11 @@ import requests
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jwt import InvalidTokenError
-from passlib.context import CryptContext
 from starlette import status
 
 from llm_freeway.database import User, env
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def get_public_key() -> tuple[str, str]:

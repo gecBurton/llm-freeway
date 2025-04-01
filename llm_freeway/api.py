@@ -12,9 +12,7 @@ from sqlmodel import Session, SQLModel, select
 from starlette import status
 from starlette.responses import StreamingResponse
 
-from llm_freeway.auth import (
-    get_current_user,
-)
+from llm_freeway.auth import get_current_user
 from llm_freeway.database import (
     LLM,
     EventLog,

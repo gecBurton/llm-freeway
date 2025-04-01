@@ -34,13 +34,14 @@ def get_public_key() -> tuple[str, str]:
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
+    public_key_alg: Annotated[tuple[str, str], Depends(get_public_key)],
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    public_key, alg = get_public_key()
+    public_key, alg = public_key_alg
     try:
         payload = jwt.decode(token, options={"verify_signature": False})
         # payload = jwt.decode(token, public_key, algorithms=[alg])

@@ -21,8 +21,8 @@ def keycloak_openid(client_id) -> KeycloakOpenID:
     return KeycloakOpenID(
         server_url=env.keycloak_server_url,
         client_id=client_id,
-        realm_name=env.keycloak_realm_name,
-        client_secret_key=env.client_secret_key,
+        realm_name="master",
+        client_secret_key=env.keycloak_client_secret_key,
     )
 
 
@@ -38,65 +38,48 @@ def keycloak_admin(keycloak_openid, client_id):
     )
     admin = KeycloakAdmin(connection=keycloak_connection)
 
-    # Fetch the client ID
-    client = admin.get_client_id(client_id)
-    attributes = {
-        "sub": {
-            "type": "string",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-        },
-        "is_admin": {
-            "type": "boolean",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-        },
-        "requests_per_minute": {
-            "type": "integer",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-        },
-        "tokens_per_minute": {
-            "type": "integer",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-        },
-        "cost_usd_per_month": {
-            "type": "integer",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-        },
+    new_realm = {
+        "realm": env.keycloak_realm_name,
+        "enabled": True,
     }
+    admin.create_realm(new_realm, skip_exists=True)
 
-    existing_mappers = admin.get_mappers_from_client(client_id=client)
-    for mapper in existing_mappers:
-        admin.remove_client_mapper(client_id=client, client_mapper_id=mapper["id"])
+    admin.connection.realm_name = env.keycloak_realm_name
+    client_id = next(
+        x["id"] for x in admin.get_clients() if x["clientId"] == "admin-cli"
+    )
 
-    for attr, config in attributes.items():
-        mapper = {
-            "name": f"{attr} Mapper",
+    for attr, type_ in (
+        ("tokens_per_minute", "int"),
+        ("requests_per_minute", "int"),
+        ("cost_usd_per_month", "int"),
+        ("is_admin", "bool"),
+    ):
+        mapper_config = {
+            "name": f"{attr}-mapper",
             "protocol": "openid-connect",
-            "protocolMapper": "oidc-usermodel-property-mapper",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
             "consentRequired": False,
             "config": {
-                "user.property": attr,
-                "id.token.claim": config["id.token.claim"],
-                "access.token.claim": config["access.token.claim"],
+                "user.attribute": attr,  # The attribute you want to map
+                "id.token.claim": "true",  # Include in ID token
+                "access.token.claim": "true",  # Include in Access token
+                "jsonType.label": type_,  # Type of the attribute
                 "claim.name": attr,
-                "jsonType.label": config["type"],
             },
         }
-        # Create the mapper
-        admin.add_mapper_to_client(client_id=client, payload=mapper)
+        try:
+            admin.add_mapper_to_client(client_id, payload=mapper_config)
+        except Exception:
+            pass
 
-    # {
-    #     "protocolMapper": "oidc-usermodel-property-mapper",
-    #     "config": {
-    #         "user.attribute": "username",
-    #         "id.token.claim": "true",
-    #     }
-    # }
-    return admin
+    yield admin
+    admin.delete_realm(env.keycloak_realm_name)
+
+
+@pytest.fixture
+def real_name():
+    return "my-test-realm"
 
 
 env = Settings()
@@ -200,8 +183,8 @@ def normal_user(session, keycloak_admin, admin_user_password, keycloak_openid):
             "email": username,
             "username": username,
             "enabled": True,
-            "firstName": "some",
-            "lastName": "one",
+            "firstName": "an",
+            "lastName": "other",
             "credentials": [
                 {
                     "type": "password",

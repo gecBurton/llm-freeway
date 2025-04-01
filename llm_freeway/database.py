@@ -1,10 +1,7 @@
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
 from uuid import UUID, uuid4
 
 import requests
-from fastapi import Depends
-from keycloak import KeycloakAdmin, KeycloakOpenID, KeycloakOpenIDConnection
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlmodel import Field, Session, SQLModel, select
@@ -28,26 +25,6 @@ def get_session():
         yield session
 
 
-def get_keycloak_admin() -> KeycloakAdmin:
-    keycloak_openid = KeycloakOpenID(
-        server_url=env.keycloak_server_url,
-        client_id="example_client",
-        realm_name=env.keycloak_realm_name,
-        client_secret_key=env.client_secret_key,
-    )
-
-    keycloak_connection = KeycloakOpenIDConnection(
-        server_url=env.keycloak_server_url,
-        username="admin",
-        password="admin",
-        realm_name=keycloak_openid.realm_name,
-        client_secret_key=keycloak_openid.client_secret_key,
-        verify=True,
-    )
-
-    return KeycloakAdmin(connection=keycloak_connection)
-
-
 class Spend(BaseModel):
     requests: int
     completion_tokens: int
@@ -56,9 +33,9 @@ class Spend(BaseModel):
 
 
 class User(BaseModel):
-    id: UUID | None = Field()
-    username: str = Field()
-    password: str = Field()
+    id: UUID | None = Field(default_factory=uuid4)
+    username: str
+    password: str | None = Field(default=None)
     is_admin: bool = False
     requests_per_minute: int = 60
     tokens_per_minute: int = 100_000
@@ -67,7 +44,7 @@ class User(BaseModel):
     def get_token(self) -> str:
         data = {
             "client_id": env.keycloak_client_id,
-            "client_secret": env.client_secret_key,
+            "client_secret": env.keycloak_client_secret_key,
             "username": self.username,
             "password": self.password,
             "grant_type": "password",
@@ -131,9 +108,3 @@ class EventLog(SQLModel, table=True):
     prompt_tokens: int = Field()
     completion_tokens: int = Field()
     cost_usd: float | None = None
-
-
-def get_user(
-    username: str, session: Annotated[KeycloakAdmin, Depends(get_keycloak_admin)]
-) -> User:
-    return User(username=username)

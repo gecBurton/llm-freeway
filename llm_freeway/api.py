@@ -14,7 +14,6 @@ from starlette.responses import StreamingResponse
 
 from llm_freeway.auth import (
     get_current_user,
-    pwd_context,
 )
 from llm_freeway.database import (
     LLM,
@@ -22,9 +21,7 @@ from llm_freeway.database import (
     User,
     engine,
     get_session,
-    get_user,
 )
-from llm_freeway.settings import env
 
 load_dotenv()
 
@@ -32,19 +29,6 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
-    if env.temp_admin_password:
-        with Session(engine) as session:
-            if user := get_user("admin", session):
-                user.is_admin = True
-                user.hashed_password = pwd_context.hash(env.temp_admin_password)
-            else:
-                user = User(
-                    username="admin",
-                    is_admin=True,
-                    hashed_password=pwd_context.hash(env.temp_admin_password),
-                )
-            session.add(user)
-            session.commit()
     yield
 
 

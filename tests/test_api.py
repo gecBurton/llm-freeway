@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app, get_session
+from llm_freeway.auth import get_current_user
 from llm_freeway.database import get_models
 from tests.conftest import get_headers
 
@@ -85,16 +86,6 @@ def test_chat_completions_too_many_tokens(
     assert response.json() == {"detail": "tokens_per_minute=18000 exceeded limit=1000"}
 
 
-def test_chat_completions_not_authenticated(client, payload, normal_user, gpt_4o):
-    response = client.post(
-        "/chat/completions",
-        json=dict(payload, stream=False),
-    )
-
-    assert response.status_code == httpx.codes.UNAUTHORIZED
-    assert response.json() == {"detail": "Not authenticated"}
-
-
 def test_chat_completions_too_much_usd(
     client, payload, user_with_low_rate_high_spend, gpt_4o
 ):
@@ -128,10 +119,16 @@ def test_chat_completions_model_doesnt_exist(
 
 @pytest.mark.anyio
 async def test_chat_completions_streaming(
-    get_session_override, get_models_override, payload, normal_user, gpt_4o
+    get_session_override,
+    get_models_override,
+    payload,
+    normal_user,
+    get_current_user_override,
+    gpt_4o,
 ):
     app.dependency_overrides[get_session] = get_session_override
     app.dependency_overrides[get_models] = get_models_override
+    app.dependency_overrides[get_current_user] = get_current_user_override
 
     records = []
     response_id = []

@@ -82,8 +82,6 @@ async def stream_response(
             detail=f"model={body.model} not registered",
         )
 
-    print("i am here 3", current_user)
-
     vertex_credentials = os.getenv("VERTEX_CREDENTIALS", None)
 
     if not body.stream:

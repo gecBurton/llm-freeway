@@ -148,3 +148,18 @@ def test_chat_completion(admin_user):
         response.json()["choices"][0]["message"]["content"]
         == "hello, how can i help you?"
     )
+
+
+def test_chat_completions_not_authenticated():
+    payload = {
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": "hello :)"}],
+        "mock_response": "hello, how can i help you?",
+    }
+    response = requests.post(
+        "http://localhost:8000/chat/completions",
+        json=dict(payload, stream=False),
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}

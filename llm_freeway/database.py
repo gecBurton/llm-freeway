@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -72,13 +73,22 @@ class User(BaseModel):
         )
 
 
-class LLMBase(SQLModel):
+class LLM(BaseModel):
+    name: str
     input_cost_per_token: float
     output_cost_per_token: float
 
 
-class LLM(LLMBase, table=True):
-    name: str = Field(primary_key=True, description="the litellm-model name")
+class LLMConfig(BaseModel):
+    models: list[LLM]
+
+
+def get_models() -> LLMConfig:
+    file_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", env.llm_config
+    )
+    with open(file_path) as f:
+        return LLMConfig.model_validate_json(f.read())
 
 
 class EventLog(SQLModel, table=True):
@@ -86,7 +96,7 @@ class EventLog(SQLModel, table=True):
     timestamp: datetime = Field(default_factory=datetime.now)
     response_id: str = Field(index=True)
     user_id: UUID = Field()
-    model: str = Field(foreign_key="llm.name")
+    model: str
     prompt_tokens: int = Field()
     completion_tokens: int = Field()
     cost_usd: float | None = None

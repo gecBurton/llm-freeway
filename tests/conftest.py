@@ -8,7 +8,7 @@ from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app
-from llm_freeway.database import LLM, EventLog, User, get_session
+from llm_freeway.database import LLM, EventLog, LLMConfig, User, get_models, get_session
 
 keycloak_client_id = "admin-cli"
 keycloak_client_secret_key = "secret"
@@ -102,12 +102,18 @@ def get_session_override(session):
     return f
 
 
-@pytest.fixture()
-def client(session: Session):
-    def get_session_override():
-        return session
+@pytest.fixture
+def get_models_override(gpt_4o, gpt_4o_mini):
+    def f():
+        return LLMConfig(models=[gpt_4o, gpt_4o_mini])
 
+    return f
+
+
+@pytest.fixture()
+def client(get_session_override, get_models_override):
     app.dependency_overrides[get_session] = get_session_override
+    app.dependency_overrides[get_models] = get_models_override
 
     client = TestClient(app)
     yield client
@@ -129,9 +135,7 @@ def admin_user_password():
 
 
 @pytest.fixture
-def admin_user(
-    session, admin_user_password, keycloak_admin, keycloak_openid, client_id
-):
+def admin_user(session, admin_user_password, keycloak_admin):
     username = "some.one@department.gov.uk"
     new_user_id = keycloak_admin.create_user(
         {
@@ -173,7 +177,7 @@ def admin_user(
 
 
 @pytest.fixture
-def normal_user(session, keycloak_admin, admin_user_password, keycloak_openid):
+def normal_user(session, keycloak_admin, admin_user_password):
     username = "an.other@department.gov.uk"
     new_user_id = keycloak_admin.create_user(
         {
@@ -305,25 +309,15 @@ def user_with_low_rate_high_spend(normal_user, session, gpt_4o):
 
 
 @pytest.fixture
-def gpt_4o(session):
+def gpt_4o():
     llm = LLM(name="gpt-4o", input_cost_per_token=0.1, output_cost_per_token=0.2)
-    session.add(llm)
-    session.commit()
-    session.refresh(llm)
     yield llm
-    session.delete(llm)
-    session.commit()
 
 
 @pytest.fixture
-def gpt_4o_mini(session):
+def gpt_4o_mini():
     llm = LLM(name="gpt-4o-mini", input_cost_per_token=0.1, output_cost_per_token=0.2)
-    session.add(llm)
-    session.commit()
-    session.refresh(llm)
     yield llm
-    session.delete(llm)
-    session.commit()
 
 
 def get_token(user: User) -> str:

@@ -14,10 +14,11 @@ from starlette.responses import StreamingResponse
 
 from llm_freeway.auth import get_current_user
 from llm_freeway.database import (
-    LLM,
     EventLog,
+    LLMConfig,
     User,
     engine,
+    get_models,
     get_session,
 )
 
@@ -50,6 +51,7 @@ async def stream_response(
     body: ChatRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    llm_config: Annotated[LLMConfig, Depends(get_models)],
 ) -> StreamingResponse:
     spend = current_user.get_spend(session)
     if spend.requests > current_user.requests_per_minute:
@@ -71,8 +73,9 @@ async def stream_response(
             detail=f"cost_usd_per_month exceeded={spend.cost_usd} exceeded limit={current_user.cost_usd_per_month}",
         )
 
-    model = session.get(LLM, body.model)
-    if model is None:
+    try:
+        model = next(model for model in llm_config.models if model.name == body.model)
+    except StopIteration:
         raise HTTPException(
             status_code=httpx.codes.NOT_FOUND,
             detail=f"model={body.model} not registered",

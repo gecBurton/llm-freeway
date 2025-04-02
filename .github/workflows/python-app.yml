@@ -31,6 +31,9 @@ jobs:
         echo PUBLIC_KEY_URL=http://localhost:8080/realms/tmp-realm/protocol/openid-connect/certs >> .env
 
 
+    - name: Set up KeyCloak
+      run: docker compose up -d keycloak
+
     - name: Set up Poetry
       uses: abatilo/actions-poetry@v4
 

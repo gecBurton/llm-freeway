@@ -32,7 +32,7 @@ jobs:
 
 
     - name: Set up KeyCloak
-      run: docker compose up -d keycloak
+      run: docker compose up -d keycloak postgres
 
     - name: Set up Poetry
       uses: abatilo/actions-poetry@v4
@@ -44,5 +44,8 @@ jobs:
     - name: Check Formatting
       run: make format
 
-    - name: Run Tests
+    - name: Run Unit Tests
       run: make test
+
+    - name: Run Integration Tests
+      run: poetry run pytest test_integration.py

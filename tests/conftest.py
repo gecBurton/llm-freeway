@@ -77,11 +77,6 @@ def keycloak_admin(keycloak_openid):
     admin.delete_realm(keycloak_realm_name)
 
 
-@pytest.fixture
-def real_name():
-    return "my-test-realm"
-
-
 @pytest.fixture(name="session")
 def session():
     engine = create_engine(
@@ -135,7 +130,7 @@ def admin_user_password():
 
 
 @pytest.fixture
-def admin_user(session, admin_user_password, keycloak_admin):
+def admin_user(admin_user_password, keycloak_admin):
     username = "some.one@department.gov.uk"
     new_user_id = keycloak_admin.create_user(
         {
@@ -177,7 +172,7 @@ def admin_user(session, admin_user_password, keycloak_admin):
 
 
 @pytest.fixture
-def normal_user(session, keycloak_admin, admin_user_password):
+def normal_user(keycloak_admin, admin_user_password):
     username = "an.other@department.gov.uk"
     new_user_id = keycloak_admin.create_user(
         {

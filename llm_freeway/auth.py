@@ -1,3 +1,4 @@
+from logging import getLogger
 from typing import Annotated
 
 import jwt
@@ -9,6 +10,8 @@ from starlette import status
 from llm_freeway.database import User, env
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+logger = getLogger(__file__)
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
@@ -25,7 +28,8 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
             tokens_per_minute=payload["tokens_per_minute"],
             cost_usd_per_month=payload["cost_usd_per_month"],
         )
-    except (InvalidTokenError, KeyError):
+    except (InvalidTokenError, KeyError) as e:
+        logger.error(e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",

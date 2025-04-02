@@ -54,6 +54,7 @@ async def stream_response(
     llm_config: Annotated[LLMConfig, Depends(get_models)],
 ) -> StreamingResponse:
     spend = current_user.get_spend(session)
+
     if spend.requests > current_user.requests_per_minute:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -80,6 +81,8 @@ async def stream_response(
             status_code=httpx.codes.NOT_FOUND,
             detail=f"model={body.model} not registered",
         )
+
+    print("i am here 3", current_user)
 
     vertex_credentials = os.getenv("VERTEX_CREDENTIALS", None)
 

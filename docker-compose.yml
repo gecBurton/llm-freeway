@@ -24,6 +24,9 @@ services:
     depends_on:
       - postgres
     env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/
+      - PUBLIC_KEY_URL=http://keycloak:8080/realms/tmp-realm/protocol/openid-connect/certs
     ports:
       - "8000:8000"
 

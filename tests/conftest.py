@@ -31,7 +31,7 @@ def gpt_4o_mini():
 
 
 @pytest.fixture(autouse=True, scope="session")
-def llm_config_fiel(gpt_4o, gpt_4o_mini):
+def llm_config_file(gpt_4o, gpt_4o_mini):
     s3 = boto3.client(
         "s3",
         endpoint_url=env.minio_host,
@@ -156,48 +156,6 @@ def payload(gpt_4o):
 @pytest.fixture
 def admin_user_password():
     yield "admin"
-
-
-@pytest.fixture
-def admin_user(session, admin_user_password, keycloak_admin):
-    username = "some.one@department.gov.uk"
-    new_user_id = keycloak_admin.create_user(
-        {
-            "email": username,
-            "username": username,
-            "enabled": True,
-            "firstName": "some",
-            "lastName": "one",
-            "credentials": [
-                {
-                    "type": "password",
-                    "value": admin_user_password,
-                    "temporary": False,
-                }
-            ],
-            "attributes": {
-                "is_admin": True,
-                "requests_per_minute": 60,
-                "tokens_per_minute": 100_000,
-                "cost_usd_per_month": 10,
-            },
-        },
-        exist_ok=True,
-    )
-
-    user = User(
-        id=new_user_id,
-        username=username,
-        password=admin_user_password,
-        is_admin=True,
-        requests_per_minute=60,
-        tokens_per_minute=100_000,
-        cost_usd_per_month=10,
-    )
-
-    yield user
-
-    keycloak_admin.delete_user(user_id=new_user_id)
 
 
 @pytest.fixture

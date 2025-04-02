@@ -1,7 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-import requests
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlmodel import Field, Session, SQLModel, select
@@ -33,30 +32,13 @@ class Spend(BaseModel):
 
 
 class User(BaseModel):
-    id: UUID | None = Field(default_factory=uuid4)
+    id: UUID
     username: str
-    password: str | None = Field(default=None)
+    password: str | None = None
     is_admin: bool = False
     requests_per_minute: int = 60
     tokens_per_minute: int = 100_000
     cost_usd_per_month: int = 10
-
-    def get_token(self) -> str:
-        data = {
-            "client_id": env.keycloak_client_id,
-            "client_secret": env.keycloak_client_secret_key,
-            "username": self.username,
-            "password": self.password,
-            "grant_type": "password",
-        }
-        keycloak_url = f"{env.keycloak_server_url}/realms/{env.keycloak_realm_name}/protocol/openid-connect/token"
-        response = requests.post(keycloak_url, data=data)
-        response.raise_for_status()
-        return response.json()["access_token"]
-
-    def headers(self) -> dict[str, str]:
-        token = self.get_token()
-        return {"Authorization": f"Bearer {token}"}
 
     def get_spend(self, session) -> Spend:
         one_minute_ago = datetime.now(tz=UTC) - timedelta(minutes=1)

@@ -6,13 +6,14 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app, get_session
+from tests.conftest import get_headers
 
 
 def test_chat_completions(client, payload, normal_user, gpt_4o):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
-        headers=normal_user.headers(),
+        headers=get_headers(normal_user),
     )
 
     assert response.status_code == httpx.codes.OK
@@ -42,7 +43,7 @@ def test_chat_completions(client, payload, normal_user, gpt_4o):
     log_response = client.get(
         "/spend/logs",
         params=dict(response_id=response_json["id"]),
-        headers=normal_user.headers(),
+        headers=get_headers(normal_user),
     )
 
     assert log_response.status_code == httpx.codes.OK
@@ -63,18 +64,20 @@ def test_chat_completions_too_many_requests(
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
-        headers=user_with_high_rate_low_spend.headers(),
+        headers=get_headers(user_with_high_rate_low_spend),
     )
 
     assert response.status_code == httpx.codes.TOO_MANY_REQUESTS
     assert response.json() == {"detail": "requests_per_minute=100 exceeded limit=60"}
 
 
-def test_chat_completions_too_many_tokens(client, payload, user_with_spend, gpt_4o):
+def test_chat_completions_too_many_tokens(
+    client, payload, user_with_high_tokens_low_spend, gpt_4o
+):
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
-        headers=user_with_spend.headers(),
+        headers=get_headers(user_with_high_tokens_low_spend),
     )
 
     assert response.status_code == httpx.codes.TOO_MANY_REQUESTS
@@ -97,7 +100,7 @@ def test_chat_completions_too_much_usd(
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False),
-        headers=user_with_low_rate_high_spend.headers(),
+        headers=get_headers(user_with_low_rate_high_spend),
     )
 
     assert response.status_code == httpx.codes.TOO_MANY_REQUESTS
@@ -115,7 +118,7 @@ def test_chat_completions_model_doesnt_exist(
     response = client.post(
         "/chat/completions",
         json=dict(payload, stream=False, model="my-model"),
-        headers=normal_user.headers(),
+        headers=get_headers(normal_user),
     )
 
     assert response.status_code == httpx.codes.NOT_FOUND
@@ -137,7 +140,7 @@ async def test_chat_completions_streaming(
             "POST",
             "/chat/completions",
             json=dict(payload, stream=True),
-            headers=normal_user.headers(),
+            headers=get_headers(normal_user),
         ) as response:
             async for line in response.aiter_lines():
                 if line and line.startswith("data: ") and line != "data: [DONE]":
@@ -166,7 +169,7 @@ async def test_chat_completions_streaming(
     log_response = test_client.get(
         "/spend/logs",
         params=dict(response_id=response_id[0]),
-        headers=normal_user.headers(),
+        headers=get_headers(normal_user),
     )
 
     assert log_response.status_code == httpx.codes.OK

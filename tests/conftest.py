@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytest
+import requests
 from keycloak import KeycloakAdmin, KeycloakOpenID, KeycloakOpenIDConnection
 from sqlalchemy import StaticPool, create_engine
 from sqlmodel import Session, SQLModel
@@ -8,28 +9,27 @@ from starlette.testclient import TestClient
 
 from llm_freeway.api import app
 from llm_freeway.database import LLM, EventLog, User, get_session
-from llm_freeway.settings import Settings
+
+keycloak_client_id = "admin-cli"
+keycloak_client_secret_key = "secret"
+keycloak_realm_name = "tmp-realm"
+keycloak_server_url = "http://localhost:8080"
 
 
 @pytest.fixture
-def client_id():
-    return env.keycloak_client_id
-
-
-@pytest.fixture
-def keycloak_openid(client_id) -> KeycloakOpenID:
+def keycloak_openid() -> KeycloakOpenID:
     return KeycloakOpenID(
-        server_url=env.keycloak_server_url,
-        client_id=client_id,
+        server_url=keycloak_server_url,
+        client_id=keycloak_client_id,
         realm_name="master",
-        client_secret_key=env.keycloak_client_secret_key,
+        client_secret_key=keycloak_client_secret_key,
     )
 
 
 @pytest.fixture
-def keycloak_admin(keycloak_openid, client_id):
+def keycloak_admin(keycloak_openid):
     keycloak_connection = KeycloakOpenIDConnection(
-        server_url=env.keycloak_server_url,
+        server_url=keycloak_server_url,
         username="admin",
         password="admin",
         realm_name=keycloak_openid.realm_name,
@@ -39,12 +39,12 @@ def keycloak_admin(keycloak_openid, client_id):
     admin = KeycloakAdmin(connection=keycloak_connection)
 
     new_realm = {
-        "realm": env.keycloak_realm_name,
+        "realm": keycloak_realm_name,
         "enabled": True,
     }
     admin.create_realm(new_realm, skip_exists=True)
 
-    admin.connection.realm_name = env.keycloak_realm_name
+    admin.connection.realm_name = keycloak_realm_name
     client_id = next(
         x["id"] for x in admin.get_clients() if x["clientId"] == "admin-cli"
     )
@@ -74,15 +74,12 @@ def keycloak_admin(keycloak_openid, client_id):
             pass
 
     yield admin
-    admin.delete_realm(env.keycloak_realm_name)
+    admin.delete_realm(keycloak_realm_name)
 
 
 @pytest.fixture
 def real_name():
     return "my-test-realm"
-
-
-env = Settings()
 
 
 @pytest.fixture(name="session")
@@ -241,6 +238,30 @@ def user_with_spend(normal_user, session, gpt_4o):
 
 
 @pytest.fixture
+def user_with_high_tokens_low_spend(normal_user, session, gpt_4o):
+    now = datetime.now()
+    events = [
+        EventLog(
+            timestamp=now,
+            response_id="1",
+            user_id=normal_user.id,
+            model=gpt_4o.name,
+            prompt_tokens=200,
+            completion_tokens=100,
+            cost_usd=0,
+        )
+        for _ in range(60)
+    ]
+    for event in events:
+        session.add(event)
+    session.commit()
+    yield normal_user
+    for event in events:
+        session.delete(event)
+    session.commit()
+
+
+@pytest.fixture
 def user_with_high_rate_low_spend(normal_user, session, gpt_4o):
     now = datetime.now()
     events = [
@@ -303,3 +324,23 @@ def gpt_4o_mini(session):
     yield llm
     session.delete(llm)
     session.commit()
+
+
+def get_token(user: User) -> str:
+    data = {
+        "client_id": keycloak_client_id,
+        "client_secret": keycloak_client_secret_key,
+        "username": user.username,
+        "password": user.password,
+        "grant_type": "password",
+    }
+
+    keycloak_url = f"{keycloak_server_url}/realms/{keycloak_realm_name}/protocol/openid-connect/token"
+    response = requests.post(keycloak_url, data=data)
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+
+def get_headers(user: User) -> dict[str, str]:
+    token = get_token(user)
+    return {"Authorization": f"Bearer {token}"}

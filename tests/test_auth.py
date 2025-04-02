@@ -1,54 +1,36 @@
-from datetime import timedelta
+from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import HTTPException
+from requests import HTTPError
 
-from llm_freeway.auth import authenticate_user, get_current_user
-from llm_freeway.database import User, create_access_token
+from llm_freeway.auth import get_current_user
+from llm_freeway.database import User
+from tests.conftest import get_token
 
 
-def test_authenticate_user(admin_user, admin_user_password, session):
+@pytest.mark.anyio
+async def test_get_current_user(normal_user: User):
+    actual_user = await get_current_user(get_token(normal_user))
+    normal_user.password = None
+    assert actual_user == normal_user
+
+
+@pytest.mark.anyio
+async def test_get_current_user_corrupt_token(normal_user: User):
+    with pytest.raises(HTTPException) as e:
+        await get_current_user(get_token(normal_user) + "!")
+    assert e.value.status_code == httpx.codes.UNAUTHORIZED
+    assert e.value.detail == "Could not validate credentials"
+
+
+@pytest.mark.anyio
+async def test_get_current_user_does_not_exist():
+    new_user = User(username="new.person@example.com", id=uuid4())
+    with pytest.raises(HTTPError) as e:
+        await get_current_user(get_token(new_user))
     assert (
-        authenticate_user(admin_user.username, admin_user_password, session)
-        == admin_user
+        e.value.args[0]
+        == "404 Client Error: Not Found for url: http://localhost:8080/realms/tmp-realm/protocol/openid-connect/token"
     )
-
-
-def test_authenticate_user_non_existent_user(admin_user, session):
-    assert authenticate_user("non-user", "admin", session) is None
-
-
-def test_authenticate_user_wrong_password(admin_user, session):
-    assert authenticate_user(admin_user.username, "password", session) is None
-
-
-@pytest.mark.anyio
-async def test_get_current_user(admin_user: User, session):
-    actual_user = await get_current_user(admin_user.get_token(), session)
-    assert actual_user == admin_user
-
-
-@pytest.mark.anyio
-async def test_get_current_user_corrupt_token(admin_user: User, session):
-    with pytest.raises(HTTPException) as e:
-        await get_current_user(admin_user.get_token() + "!", session)
-    assert e.value.status_code == 401
-    assert e.value.detail == "Could not validate credentials"
-
-
-@pytest.mark.anyio
-async def test_get_current_user_does_not_exist(session):
-    new_user = User(username="new.person@example.com")
-    with pytest.raises(HTTPException) as e:
-        await get_current_user(new_user.get_token(), session)
-    assert e.value.status_code == 401
-    assert e.value.detail == "Could not validate credentials"
-
-
-@pytest.mark.anyio
-async def test_get_current_user_token_has_no_user(session):
-    token = create_access_token(data={}, expires_delta=timedelta(minutes=15))
-    with pytest.raises(HTTPException) as e:
-        await get_current_user(token, session)
-    assert e.value.status_code == 401
-    assert e.value.detail == "Could not validate credentials"

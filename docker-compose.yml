@@ -18,14 +18,29 @@ services:
       - KEYCLOAK_ADMIN_PASSWORD=admin
     command: start-dev
 
+  minio:
+    image: quay.io/minio/minio
+    expose:
+      - "9000"
+      - "9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ACCESS_KEY=minio_access_key
+      - MINIO_SECRET_KEY=minio_secret_key
+    command: server --console-address ":9001" /data
   web:
     build:
       dockerfile: Dockerfile
     depends_on:
       - postgres
+      - keycloak
+      - minio
     env_file: .env
     ports:
       - "8000:8000"
+
 
 
 volumes:

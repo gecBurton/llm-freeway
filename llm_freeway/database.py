@@ -1,7 +1,7 @@
-import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import boto3
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlmodel import Field, Session, SQLModel, select
@@ -84,11 +84,15 @@ class LLMConfig(BaseModel):
 
 
 def get_models() -> LLMConfig:
-    file_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", env.llm_config
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=env.aws_access_key_id,
+        aws_secret_access_key=env.aws_secret_access_key,
+        region_name=env.aws_region_name,
+        endpoint_url=env.minio_host,
     )
-    with open(file_path) as f:
-        return LLMConfig.model_validate_json(f.read())
+    obj = s3.get_object(Bucket=env.s3_bucket, Key=env.s3_key)["Body"]
+    return LLMConfig.model_validate_json(obj.read())
 
 
 class EventLog(SQLModel, table=True):

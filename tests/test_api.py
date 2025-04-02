@@ -6,7 +6,6 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app, get_session
-from llm_freeway.database import get_models
 from tests.conftest import get_headers
 
 
@@ -131,7 +130,7 @@ async def test_chat_completions_streaming(
     get_session_override, get_models_override, payload, normal_user, gpt_4o
 ):
     app.dependency_overrides[get_session] = get_session_override
-    app.dependency_overrides[get_models] = get_models_override
+    # app.dependency_overrides[get_models] = get_models_override
 
     records = []
     response_id = []

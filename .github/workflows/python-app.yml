@@ -25,14 +25,12 @@ jobs:
     - name: Create .env
       run: |
         touch .env
-        echo SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7 >> .env
-        echo ALGORITHM=HS256 >> .env
-        echo ACCESS_TOKEN_EXPIRE_MINUTES=30 >> .env
         echo PUBLIC_KEY_URL=http://localhost:8080/realms/tmp-realm/protocol/openid-connect/certs >> .env
+        echo MINIO_HOST=http://localhost:9000 >> .env
 
 
     - name: Set up KeyCloak
-      run: docker compose up -d keycloak
+      run: docker compose up -d keycloak minio
 
     - name: Set up Poetry
       uses: abatilo/actions-poetry@v4

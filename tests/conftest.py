@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+import boto3
 import pytest
 import requests
 from keycloak import KeycloakAdmin, KeycloakOpenID, KeycloakOpenIDConnection
@@ -8,12 +9,49 @@ from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app
-from llm_freeway.database import LLM, EventLog, LLMConfig, User, get_models, get_session
+from llm_freeway.database import LLM, EventLog, LLMConfig, User, get_session
+from llm_freeway.settings import env
 
 keycloak_client_id = "admin-cli"
 keycloak_client_secret_key = "secret"
 keycloak_realm_name = "tmp-realm"
 keycloak_server_url = "http://localhost:8080"
+
+
+@pytest.fixture(scope="session")
+def gpt_4o():
+    llm = LLM(name="gpt-4o", input_cost_per_token=0.1, output_cost_per_token=0.2)
+    yield llm
+
+
+@pytest.fixture(scope="session")
+def gpt_4o_mini():
+    llm = LLM(name="gpt-4o-mini", input_cost_per_token=0.1, output_cost_per_token=0.2)
+    yield llm
+
+
+@pytest.fixture(autouse=True, scope="session")
+def llm_config_fiel(gpt_4o, gpt_4o_mini):
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=env.minio_host,
+        aws_access_key_id=env.aws_access_key_id,
+        aws_secret_access_key=env.aws_secret_access_key,
+    )
+    if not any(
+        bucket["Name"] == env.s3_bucket for bucket in s3.list_buckets()["Buckets"]
+    ):
+        s3.create_bucket(Bucket=env.s3_bucket)
+
+    llm_config = LLMConfig(models=[gpt_4o, gpt_4o_mini])
+
+    s3.put_object(
+        Bucket=env.s3_bucket,
+        Key=env.s3_key,
+        Body=bytes(llm_config.model_dump_json().encode("UTF-8")),
+    )
+
+    yield env.s3_key
 
 
 @pytest.fixture
@@ -77,11 +115,6 @@ def keycloak_admin(keycloak_openid):
     admin.delete_realm(keycloak_realm_name)
 
 
-@pytest.fixture
-def real_name():
-    return "my-test-realm"
-
-
 @pytest.fixture(name="session")
 def session():
     engine = create_engine(
@@ -113,7 +146,7 @@ def get_models_override(gpt_4o, gpt_4o_mini):
 @pytest.fixture()
 def client(get_session_override, get_models_override):
     app.dependency_overrides[get_session] = get_session_override
-    app.dependency_overrides[get_models] = get_models_override
+    # app.dependency_overrides[get_models] = get_models_override
 
     client = TestClient(app)
     yield client
@@ -177,7 +210,7 @@ def admin_user(session, admin_user_password, keycloak_admin):
 
 
 @pytest.fixture
-def normal_user(session, keycloak_admin, admin_user_password):
+def normal_user(keycloak_admin, admin_user_password):
     username = "an.other@department.gov.uk"
     new_user_id = keycloak_admin.create_user(
         {
@@ -306,18 +339,6 @@ def user_with_low_rate_high_spend(normal_user, session, gpt_4o):
     yield normal_user
     session.delete(event)
     session.commit()
-
-
-@pytest.fixture
-def gpt_4o():
-    llm = LLM(name="gpt-4o", input_cost_per_token=0.1, output_cost_per_token=0.2)
-    yield llm
-
-
-@pytest.fixture
-def gpt_4o_mini():
-    llm = LLM(name="gpt-4o-mini", input_cost_per_token=0.1, output_cost_per_token=0.2)
-    yield llm
 
 
 def get_token(user: User) -> str:

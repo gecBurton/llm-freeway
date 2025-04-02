@@ -135,18 +135,9 @@ def get_session_override(session):
     return f
 
 
-@pytest.fixture
-def get_models_override(gpt_4o, gpt_4o_mini):
-    def f():
-        return LLMConfig(models=[gpt_4o, gpt_4o_mini])
-
-    return f
-
-
 @pytest.fixture()
-def client(get_session_override, get_models_override):
+def client(get_session_override):
     app.dependency_overrides[get_session] = get_session_override
-    # app.dependency_overrides[get_models] = get_models_override
 
     client = TestClient(app)
     yield client

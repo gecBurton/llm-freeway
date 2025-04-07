@@ -56,8 +56,8 @@ def get_token_native(user: User) -> str:
 
 def get_token_keycloak(user: User) -> str:
     data = {
-        "client_id": env.keycloak_client_id,
-        "client_secret": env.keycloak_client_secret_key,
+        "client_id": env.keycloak.client_id,
+        "client_secret": env.keycloak.client_secret_key,
         "username": user.username,
         "password": user.password,
         "grant_type": "password",

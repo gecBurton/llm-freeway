@@ -16,17 +16,17 @@ from llm_freeway.settings import env
 @pytest.fixture
 def keycloak_openid() -> KeycloakOpenID:
     return KeycloakOpenID(
-        server_url=env.keycloak_server_url,
-        client_id=env.keycloak_client_id,
+        server_url=env.keycloak.server_url,
+        client_id=env.keycloak.client_id,
         realm_name="master",
-        client_secret_key=env.keycloak_client_secret_key,
+        client_secret_key=env.keycloak.client_secret_key,
     )
 
 
 @pytest.fixture
 def keycloak_admin(keycloak_openid):
     keycloak_connection = KeycloakOpenIDConnection(
-        server_url=env.keycloak_server_url,
+        server_url=env.keycloak.server_url,
         username="admin",
         password="admin",
         realm_name=keycloak_openid.realm_name,
@@ -36,12 +36,12 @@ def keycloak_admin(keycloak_openid):
     admin = KeycloakAdmin(connection=keycloak_connection)
 
     new_realm = {
-        "realm": env.keycloak_realm_name,
+        "realm": env.keycloak.realm_name,
         "enabled": True,
     }
     admin.create_realm(new_realm, skip_exists=True)
 
-    admin.connection.realm_name = env.keycloak_realm_name
+    admin.connection.realm_name = env.keycloak.realm_name
     client_id = next(
         x["id"] for x in admin.get_clients() if x["clientId"] == "admin-cli"
     )
@@ -71,7 +71,7 @@ def keycloak_admin(keycloak_openid):
             pass
 
     yield admin
-    admin.delete_realm(env.keycloak_realm_name)
+    admin.delete_realm(env.keycloak.realm_name)
 
 
 @pytest.fixture

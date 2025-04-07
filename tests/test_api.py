@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
@@ -182,3 +183,130 @@ async def test_chat_completions_streaming(
     assert log_response_json[0]["completion_tokens"] == 8
     assert log_response_json[0]["prompt_tokens"] == 9
     assert log_response_json[0]["user_id"] == str(normal_user.id)
+
+
+def test_get_users(client, admin_user, normal_user):
+    response = client.get("/users", headers=get_headers(normal_user))
+
+    assert response.status_code == httpx.codes.OK
+    response_json = response.json()
+
+    users = response_json["items"]
+    assert len(users) == 1
+    assert users[0]["id"] == str(normal_user.id)
+
+
+def test_get_users_not_admin(client, admin_user, normal_user):
+    response = client.get("/users", headers=get_headers(admin_user))
+
+    assert response.status_code == httpx.codes.OK
+    response_json = response.json()
+
+    users = response_json["items"]
+    assert len(users) == 2
+
+
+def test_create_user(client, admin_user):
+    payload = {"username": "some-one", "password": "password", "is_admin": False}
+
+    response = client.post("/users", json=payload, headers=get_headers(admin_user))
+
+    assert response.status_code == httpx.codes.OK
+    response_json = response.json()
+
+    assert not response_json["is_admin"]
+    assert response_json["username"] == "some-one"
+
+
+def test_create_user_not_admin(client, normal_user):
+    payload = {"username": "some-one", "password": "password", "is_admin": False}
+
+    response = client.post("/users", json=payload, headers=get_headers(normal_user))
+
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response.json() == {
+        "detail": "you need to be an admin to perform this action"
+    }
+
+
+def test_update_user(client, admin_user, normal_user):
+    payload = {"username": "someone-else", "password": "password", "is_admin": True}
+
+    response = client.put(
+        f"/users/{normal_user.id}", json=payload, headers=get_headers(admin_user)
+    )
+
+    assert response.status_code == httpx.codes.OK
+    response_json = response.json()
+
+    assert response_json["is_admin"]
+    assert response_json["username"] == "someone-else"
+
+
+def test_update_user_not_admin(client, normal_user):
+    payload = {"username": "some-one", "password": "password", "is_admin": False}
+
+    response = client.put(
+        f"/users/{normal_user.id}", json=payload, headers=get_headers(normal_user)
+    )
+
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response.json() == {
+        "detail": "you need to be an admin to perform this action"
+    }
+
+
+def test_update_user_does_not_exist(client, admin_user):
+    payload = {"username": "some-one", "password": "password", "is_admin": False}
+
+    response = client.put(
+        "/users/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        json=payload,
+        headers=get_headers(admin_user),
+    )
+
+    assert response.status_code == httpx.codes.NOT_FOUND
+    assert response.json() == {"detail": "user does not exist"}
+
+
+def test_delete_user(client, admin_user, normal_user):
+    response = client.delete(
+        f"/users/{normal_user.id}", headers=get_headers(admin_user)
+    )
+
+    assert response.status_code == httpx.codes.OK
+
+
+def test_delete_user_not_admin(client, normal_user):
+    response = client.delete(
+        f"/users/{normal_user.id}", headers=get_headers(normal_user)
+    )
+
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response.json() == {
+        "detail": "you need to be an admin to perform this action"
+    }
+
+
+def test_token(client, admin_user, admin_user_password):
+    payload = {"username": admin_user.username, "password": admin_user_password}
+
+    response = client.post("/token", data=payload)
+    response_json = response.json()
+
+    assert response.status_code == httpx.codes.OK
+    assert response_json["token_type"] == "bearer"
+    token = jwt.decode(
+        response_json["access_token"], options={"verify_signature": False}
+    )
+    assert token["sub"] == admin_user.username
+
+
+def test_token_fail(client, admin_user):
+    payload = {"username": admin_user.username, "password": "wrong password"}
+
+    response = client.post("/token", data=payload)
+    response_json = response.json()
+
+    assert response.status_code == httpx.codes.UNAUTHORIZED
+    assert response_json == {"detail": "Incorrect username or password"}

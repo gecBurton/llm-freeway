@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 from uuid import UUID, uuid4
 
+from fastapi import Depends
+from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlmodel import Field, Session, SQLModel, select
@@ -12,6 +15,8 @@ if env.database_url.startswith("sqlite://"):
     engine = create_engine(env.database_url, connect_args=connect_args)
 else:
     engine = create_engine(env.database_url)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class Token(BaseModel):
@@ -31,8 +36,8 @@ class Spend(BaseModel):
     cost_usd: float | None
 
 
-class User(BaseModel):
-    id: UUID
+class User(SQLModel):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     username: str
     password: str | None = None
     is_admin: bool = False
@@ -72,6 +77,10 @@ class User(BaseModel):
         )
 
 
+class UserDB(User, table=True):
+    hashed_password: str
+
+
 class LLMBase(SQLModel):
     input_cost_per_token: float
     output_cost_per_token: float
@@ -90,3 +99,14 @@ class EventLog(SQLModel, table=True):
     prompt_tokens: int = Field()
     completion_tokens: int = Field()
     cost_usd: float | None = None
+
+
+def authenticate_user(
+    username: str, password: str, session: Annotated[Session, Depends(get_session)]
+) -> User | None:
+    user = session.exec(select(UserDB).where(UserDB.username == username)).one()
+    if not user:
+        return None
+    if not pwd_context.verify(password, user.hashed_password):
+        return None
+    return user

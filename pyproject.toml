@@ -19,6 +19,7 @@ dependencies = [
     "boto3 (>=1.37.18,<2.0.0)",
     "python-keycloak (>=5.3.1,<6.0.0)",
     "cryptography (>=44.0.2,<45.0.0)",
+    "passlib[bcrypt] (>=1.7.4,<2.0.0)",
 ]
 
 

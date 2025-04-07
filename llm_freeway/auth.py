@@ -16,7 +16,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
     try:
-        jwks_client = PyJWKClient(env.get_certs_url())
+        jwks_client = PyJWKClient(
+            f"{env.auth.server_url}/realms/{env.auth.realm_name}/protocol/openid-connect/certs"
+        )
         signing_key = jwks_client.get_signing_key_from_jwt(token)
         payload = jwt.decode(token, signing_key.key, algorithms=["RS256"])
 
@@ -46,7 +48,7 @@ def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]):
 
 
 def get_token_native(user: User) -> str:
-    access_token_expires = timedelta(minutes=env.access_token_expire_minutes)
+    access_token_expires = timedelta(minutes=env.auth.access_token_expire_minutes)
     data = {"sub": user.username}
     expire = datetime.now(timezone.utc) + access_token_expires
     data.update({"exp": expire})
@@ -56,14 +58,14 @@ def get_token_native(user: User) -> str:
 
 def get_token_keycloak(user: User) -> str:
     data = {
-        "client_id": env.keycloak.client_id,
-        "client_secret": env.keycloak.client_secret_key,
+        "client_id": env.auth.client_id,
+        "client_secret": env.auth.client_secret_key,
         "username": user.username,
         "password": user.password,
         "grant_type": "password",
     }
 
-    keycloak_url = env.get_token_url()
+    keycloak_url = f"{env.auth.server_url}/realms/{env.auth.realm_name}/protocol/openid-connect/token"
     response = requests.post(keycloak_url, data=data)
     response.raise_for_status()
     return response.json()["access_token"]

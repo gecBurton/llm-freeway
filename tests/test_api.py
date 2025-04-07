@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app, get_session
+from llm_freeway.settings import KeycloakSettings, env
 from tests.conftest import get_headers
 
 
@@ -288,6 +289,9 @@ def test_delete_user_not_admin(client, normal_user):
     }
 
 
+@pytest.mark.skipif(
+    isinstance(env.auth, KeycloakSettings), reason="no test for keycloak"
+)
 def test_token(client, admin_user, admin_user_password):
     payload = {"username": admin_user.username, "password": admin_user_password}
 

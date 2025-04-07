@@ -172,7 +172,7 @@ def spend_logs(
     ).all()
     return EventLogResponse(items=items, page=page, size=size)
 
-
+if env.auth == 0:
 @app.post("/token")
 def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],

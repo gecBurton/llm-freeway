@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from keycloak import KeycloakAdmin, KeycloakOpenID, KeycloakOpenIDConnection
@@ -8,70 +8,70 @@ from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
 
 from llm_freeway.api import app
-from llm_freeway.auth import get_token_keycloak
+from llm_freeway.auth import get_token
 from llm_freeway.database import LLM, EventLog, User, UserDB, get_session, pwd_context
-from llm_freeway.settings import env
+from llm_freeway.settings import KeycloakSettings, env
 
 
 @pytest.fixture
-def keycloak_openid() -> KeycloakOpenID:
-    return KeycloakOpenID(
-        server_url=env.auth.server_url,
-        client_id=env.auth.client_id,
-        realm_name="master",
-        client_secret_key=env.auth.client_secret_key,
-    )
+def keycloak_admin():
+    if not isinstance(env.auth, KeycloakSettings):
+        admin = None
+    else:
+        keycloak_openid = KeycloakOpenID(
+            server_url=env.auth.server_url,
+            client_id=env.auth.client_id,
+            realm_name="master",
+            client_secret_key=env.auth.client_secret_key,
+        )
+        keycloak_connection = KeycloakOpenIDConnection(
+            server_url=env.auth.server_url,
+            username="admin",
+            password="admin",
+            realm_name=keycloak_openid.realm_name,
+            client_secret_key=keycloak_openid.client_secret_key,
+            verify=True,
+        )
+        admin = KeycloakAdmin(connection=keycloak_connection)
 
-
-@pytest.fixture
-def keycloak_admin(keycloak_openid):
-    keycloak_connection = KeycloakOpenIDConnection(
-        server_url=env.auth.server_url,
-        username="admin",
-        password="admin",
-        realm_name=keycloak_openid.realm_name,
-        client_secret_key=keycloak_openid.client_secret_key,
-        verify=True,
-    )
-    admin = KeycloakAdmin(connection=keycloak_connection)
-
-    new_realm = {
-        "realm": env.auth.realm_name,
-        "enabled": True,
-    }
-    admin.create_realm(new_realm, skip_exists=True)
-
-    admin.connection.realm_name = env.auth.realm_name
-    client_id = next(
-        x["id"] for x in admin.get_clients() if x["clientId"] == "admin-cli"
-    )
-
-    for attr, type_ in (
-        ("tokens_per_minute", "int"),
-        ("requests_per_minute", "int"),
-        ("cost_usd_per_month", "int"),
-        ("is_admin", "bool"),
-    ):
-        mapper_config = {
-            "name": f"{attr}-mapper",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-usermodel-attribute-mapper",
-            "consentRequired": False,
-            "config": {
-                "user.attribute": attr,  # The attribute you want to map
-                "id.token.claim": "true",  # Include in ID token
-                "access.token.claim": "true",  # Include in Access token
-                "jsonType.label": type_,  # Type of the attribute
-                "claim.name": attr,
-            },
+        new_realm = {
+            "realm": env.auth.realm_name,
+            "enabled": True,
         }
-        try:
-            admin.add_mapper_to_client(client_id, payload=mapper_config)
-        except Exception:
-            pass
+        admin.create_realm(new_realm, skip_exists=True)
+
+        admin.connection.realm_name = env.auth.realm_name
+        client_id = next(
+            x["id"] for x in admin.get_clients() if x["clientId"] == "admin-cli"
+        )
+
+        for attr, type_ in (
+            ("tokens_per_minute", "int"),
+            ("requests_per_minute", "int"),
+            ("cost_usd_per_month", "int"),
+            ("is_admin", "bool"),
+        ):
+            mapper_config = {
+                "name": f"{attr}-mapper",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-attribute-mapper",
+                "consentRequired": False,
+                "config": {
+                    "user.attribute": attr,  # The attribute you want to map
+                    "id.token.claim": "true",  # Include in ID token
+                    "access.token.claim": "true",  # Include in Access token
+                    "jsonType.label": type_,  # Type of the attribute
+                    "claim.name": attr,
+                },
+            }
+            try:
+                admin.add_mapper_to_client(client_id, payload=mapper_config)
+            except Exception:
+                pass
 
     yield admin
-    admin.delete_realm(env.auth.realm_name)
+    if admin:
+        admin.delete_realm(env.auth.realm_name)
 
 
 @pytest.fixture
@@ -126,31 +126,34 @@ def admin_user_password():
 
 
 @pytest.fixture
-def admin_user(session, admin_user_password, keycloak_admin, keycloak_openid):
+def admin_user(session, admin_user_password, keycloak_admin):
     username = "some.one@department.gov.uk"
-    new_user_id = keycloak_admin.create_user(
-        {
-            "email": username,
-            "username": username,
-            "enabled": True,
-            "firstName": "some",
-            "lastName": "one",
-            "credentials": [
-                {
-                    "type": "password",
-                    "value": admin_user_password,
-                    "temporary": False,
-                }
-            ],
-            "attributes": {
-                "is_admin": True,
-                "requests_per_minute": 60,
-                "tokens_per_minute": 100_000,
-                "cost_usd_per_month": 10,
+    if keycloak_admin:
+        new_user_id = keycloak_admin.create_user(
+            {
+                "email": username,
+                "username": username,
+                "enabled": True,
+                "firstName": "some",
+                "lastName": "one",
+                "credentials": [
+                    {
+                        "type": "password",
+                        "value": admin_user_password,
+                        "temporary": False,
+                    }
+                ],
+                "attributes": {
+                    "is_admin": True,
+                    "requests_per_minute": 60,
+                    "tokens_per_minute": 100_000,
+                    "cost_usd_per_month": 10,
+                },
             },
-        },
-        exist_ok=True,
-    )
+            exist_ok=True,
+        )
+    else:
+        new_user_id = str(uuid4())
 
     user = UserDB(
         id=UUID(new_user_id),
@@ -170,35 +173,39 @@ def admin_user(session, admin_user_password, keycloak_admin, keycloak_openid):
 
     session.delete(user)
     session.commit()
-    keycloak_admin.delete_user(user_id=new_user_id)
+    if keycloak_admin:
+        keycloak_admin.delete_user(user_id=new_user_id)
 
 
 @pytest.fixture
-def normal_user(session, keycloak_admin, admin_user_password, keycloak_openid):
+def normal_user(session, keycloak_admin, admin_user_password):
     username = "an.other@department.gov.uk"
-    new_user_id = keycloak_admin.create_user(
-        {
-            "email": username,
-            "username": username,
-            "enabled": True,
-            "firstName": "an",
-            "lastName": "other",
-            "credentials": [
-                {
-                    "type": "password",
-                    "value": admin_user_password,
-                    "temporary": False,
-                }
-            ],
-            "attributes": {
-                "is_admin": False,
-                "requests_per_minute": 60,
-                "tokens_per_minute": 1_000,
-                "cost_usd_per_month": 10,
+    if keycloak_admin:
+        new_user_id = keycloak_admin.create_user(
+            {
+                "email": username,
+                "username": username,
+                "enabled": True,
+                "firstName": "an",
+                "lastName": "other",
+                "credentials": [
+                    {
+                        "type": "password",
+                        "value": admin_user_password,
+                        "temporary": False,
+                    }
+                ],
+                "attributes": {
+                    "is_admin": False,
+                    "requests_per_minute": 60,
+                    "tokens_per_minute": 1_000,
+                    "cost_usd_per_month": 10,
+                },
             },
-        },
-        exist_ok=True,
-    )
+            exist_ok=True,
+        )
+    else:
+        new_user_id = str(uuid4())
 
     user = UserDB(
         id=UUID(new_user_id),
@@ -218,7 +225,8 @@ def normal_user(session, keycloak_admin, admin_user_password, keycloak_openid):
 
     session.delete(user)
     session.commit()
-    keycloak_admin.delete_user(user_id=new_user_id)
+    if keycloak_admin:
+        keycloak_admin.delete_user(user_id=new_user_id)
 
 
 @pytest.fixture
@@ -335,5 +343,5 @@ def gpt_4o_mini(session):
 
 
 def get_headers(user: User) -> dict[str, str]:
-    token = get_token_keycloak(user)
+    token = get_token(user)
     return {"Authorization": f"Bearer {token}"}

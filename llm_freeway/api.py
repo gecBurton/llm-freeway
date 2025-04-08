@@ -14,7 +14,7 @@ from sqlmodel import Session, SQLModel, select
 from starlette import status
 from starlette.responses import StreamingResponse
 
-from llm_freeway.auth import get_admin_user, get_current_user, get_token_native
+from llm_freeway.auth import get_admin_user, get_current_user, get_token
 from llm_freeway.database import (
     LLM,
     EventLog,
@@ -186,7 +186,7 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return Token(access_token=get_token_native(user), token_type="bearer")
+    return Token(access_token=get_token(user), token_type="bearer")
 
 
 class UserResponse(BaseModel):

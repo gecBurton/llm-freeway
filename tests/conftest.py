@@ -28,7 +28,7 @@ class BaseUserManager:
     def delete(self, user: User):
         raise NotImplementedError
 
-    def delete_realm(self):
+    def teardown(self):
         raise NotImplementedError
 
 
@@ -74,7 +74,7 @@ class KeyCloakUserManger(BaseUserManager):
     def delete(self, user: KeycloakUser):
         pass
 
-    def delete_realm(self):
+    def teardown(self):
         self.session.delete_realm(env.auth.realm_name)
 
 
@@ -102,8 +102,62 @@ class SQLUserManger(BaseUserManager):
         self.session.delete(user)
         self.session.commit()
 
-    def delete_realm(self):
+    def teardown(self):
         pass
+
+
+def setup_keycloak() -> KeyCloakUserManger:
+    keycloak_openid = KeycloakOpenID(
+        server_url=env.auth.server_url,
+        client_id=env.auth.client_id,
+        realm_name="master",
+        client_secret_key=env.auth.client_secret_key,
+    )
+    keycloak_connection = KeycloakOpenIDConnection(
+        server_url=env.auth.server_url,
+        username="admin",
+        password="admin",
+        realm_name=keycloak_openid.realm_name,
+        client_secret_key=keycloak_openid.client_secret_key,
+        verify=True,
+    )
+    keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
+
+    new_realm = {
+        "realm": env.auth.realm_name,
+        "enabled": True,
+    }
+    keycloak_admin.create_realm(new_realm, skip_exists=True)
+
+    keycloak_admin.connection.realm_name = env.auth.realm_name
+    client_id = next(
+        x["id"] for x in keycloak_admin.get_clients() if x["clientId"] == "admin-cli"
+    )
+
+    for attr, type_ in (
+        ("tokens_per_minute", "int"),
+        ("requests_per_minute", "int"),
+        ("cost_usd_per_month", "int"),
+        ("is_admin", "bool"),
+    ):
+        mapper_config = {
+            "name": f"{attr}-mapper",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": False,
+            "config": {
+                "user.attribute": attr,  # The attribute you want to map
+                "id.token.claim": "true",  # Include in ID token
+                "access.token.claim": "true",  # Include in Access token
+                "jsonType.label": type_,  # Type of the attribute
+                "claim.name": attr,
+            },
+        }
+        try:
+            keycloak_admin.add_mapper_to_client(client_id, payload=mapper_config)
+        except Exception:
+            pass
+    return KeyCloakUserManger(keycloak_admin)
 
 
 @pytest.fixture
@@ -111,61 +165,10 @@ def user_manager(session) -> BaseUserManager:
     if not isinstance(env.auth, KeycloakSettings):
         admin = SQLUserManger(session)
     else:
-        keycloak_openid = KeycloakOpenID(
-            server_url=env.auth.server_url,
-            client_id=env.auth.client_id,
-            realm_name="master",
-            client_secret_key=env.auth.client_secret_key,
-        )
-        keycloak_connection = KeycloakOpenIDConnection(
-            server_url=env.auth.server_url,
-            username="admin",
-            password="admin",
-            realm_name=keycloak_openid.realm_name,
-            client_secret_key=keycloak_openid.client_secret_key,
-            verify=True,
-        )
-        admin = KeycloakAdmin(connection=keycloak_connection)
-
-        new_realm = {
-            "realm": env.auth.realm_name,
-            "enabled": True,
-        }
-        admin.create_realm(new_realm, skip_exists=True)
-
-        admin.connection.realm_name = env.auth.realm_name
-        client_id = next(
-            x["id"] for x in admin.get_clients() if x["clientId"] == "admin-cli"
-        )
-
-        for attr, type_ in (
-            ("tokens_per_minute", "int"),
-            ("requests_per_minute", "int"),
-            ("cost_usd_per_month", "int"),
-            ("is_admin", "bool"),
-        ):
-            mapper_config = {
-                "name": f"{attr}-mapper",
-                "protocol": "openid-connect",
-                "protocolMapper": "oidc-usermodel-attribute-mapper",
-                "consentRequired": False,
-                "config": {
-                    "user.attribute": attr,  # The attribute you want to map
-                    "id.token.claim": "true",  # Include in ID token
-                    "access.token.claim": "true",  # Include in Access token
-                    "jsonType.label": type_,  # Type of the attribute
-                    "claim.name": attr,
-                },
-            }
-            try:
-                admin.add_mapper_to_client(client_id, payload=mapper_config)
-            except Exception:
-                pass
-
-        admin = KeyCloakUserManger(admin)
-
+        admin = setup_keycloak()
     yield admin
-    admin.delete_realm()
+
+    admin.teardown()
 
 
 @pytest.fixture

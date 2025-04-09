@@ -24,10 +24,6 @@ jobs:
 
     - name: Create .env
       run: |
-        touch .env
-        echo SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7 >> .env
-        echo ALGORITHM=HS256 >> .env
-        echo ACCESS_TOKEN_EXPIRE_MINUTES=30 >> .env
         echo AUTH__CLIENT_ID=admin-cli >> .env
         echo AUTH__CLIENT_SECRET_KEY=secret >> .env
         echo AUTH__REALM_NAME=tmp-realm >> .env

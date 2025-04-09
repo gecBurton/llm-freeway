@@ -39,7 +39,6 @@ class Spend(BaseModel):
 class User(SQLModel):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     username: str
-    password: str | None = None
     is_admin: bool = False
     requests_per_minute: int = 60
     tokens_per_minute: int = 100_000
@@ -77,8 +76,12 @@ class User(SQLModel):
         )
 
 
-class UserDB(User, table=True):
+class SQLUser(User, table=True):
     hashed_password: str
+
+
+class KeycloakUser(User):
+    password: str
 
 
 class LLMBase(SQLModel):
@@ -104,7 +107,7 @@ class EventLog(SQLModel, table=True):
 def authenticate_user(
     username: str, password: str, session: Annotated[Session, Depends(get_session)]
 ) -> User | None:
-    user = session.exec(select(UserDB).where(UserDB.username == username)).one()
+    user = session.exec(select(SQLUser).where(SQLUser.username == username)).one()
     if not user:
         return None
     if not pwd_context.verify(password, user.hashed_password):

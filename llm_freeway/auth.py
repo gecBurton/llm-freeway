@@ -11,7 +11,7 @@ from sqlalchemy.exc import NoResultFound
 from sqlmodel import Session, select
 from starlette import status
 
-from llm_freeway.database import User, UserDB, env, get_session
+from llm_freeway.database import SQLUser, User, env, get_session
 from llm_freeway.settings import KeycloakSettings, LocalAuthSettings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -46,7 +46,9 @@ def _get_current_user(token: str, session):
             token, env.auth.secret_key, algorithms=[env.auth.algorithm]
         )
         username = payload["sub"]
-        return session.exec(select(UserDB).where(UserDB.username == username)).one()
+        return session.exec(select(SQLUser).where(SQLUser.username == username)).one()
+
+    raise NOT_AUTHORIZED_ERROR
 
 
 async def get_current_user(

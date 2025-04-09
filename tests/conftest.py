@@ -9,14 +9,107 @@ from starlette.testclient import TestClient
 
 from llm_freeway.api import app
 from llm_freeway.auth import get_token
-from llm_freeway.database import LLM, EventLog, User, UserDB, get_session, pwd_context
+from llm_freeway.database import (
+    LLM,
+    EventLog,
+    KeycloakUser,
+    SQLUser,
+    User,
+    get_session,
+    pwd_context,
+)
 from llm_freeway.settings import KeycloakSettings, env
 
 
+class BaseUserManager:
+    def create(self, **kwargs) -> SQLUser:
+        raise NotImplementedError
+
+    def delete(self, user: User):
+        raise NotImplementedError
+
+    def delete_realm(self):
+        raise NotImplementedError
+
+
+class KeyCloakUserManger(BaseUserManager):
+    def __init__(self, session: KeycloakAdmin):
+        self.session = session
+
+    def create(self, **kwargs) -> KeycloakUser:
+        new_user_id = self.session.create_user(
+            {
+                "email": kwargs["username"],
+                "username": kwargs["username"],
+                "enabled": True,
+                "firstName": "some",
+                "lastName": "one",
+                "credentials": [
+                    {
+                        "type": "password",
+                        "value": kwargs["password"],
+                        "temporary": False,
+                    }
+                ],
+                "attributes": {
+                    "is_admin": kwargs["is_admin"],
+                    "requests_per_minute": kwargs.get("requests_per_minute", 60),
+                    "tokens_per_minute": kwargs.get("tokens_per_minute", 100_000),
+                    "cost_usd_per_month": kwargs.get("cost_usd_per_month", 10),
+                },
+            },
+            exist_ok=True,
+        )
+        user = KeycloakUser(
+            id=UUID(new_user_id),
+            username=kwargs["username"],
+            password=kwargs["password"],
+            is_admin=kwargs["is_admin"],
+            requests_per_minute=kwargs.get("requests_per_minute", 60),
+            tokens_per_minute=kwargs.get("tokens_per_minute", 100_000),
+            cost_usd_per_month=kwargs.get("cost_usd_per_month", 10),
+        )
+        return user
+
+    def delete(self, user: KeycloakUser):
+        pass
+
+    def delete_realm(self):
+        self.session.delete_realm(env.auth.realm_name)
+
+
+class SQLUserManger(BaseUserManager):
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(self, **kwargs) -> SQLUser:
+        user = SQLUser(
+            id=kwargs.get("id", uuid4()),
+            username=kwargs["username"],
+            is_admin=kwargs["is_admin"],
+            requests_per_minute=kwargs.get("requests_per_minute", 60),
+            tokens_per_minute=kwargs.get("tokens_per_minute", 100_000),
+            cost_usd_per_month=kwargs.get("cost_usd_per_month", 10),
+            hashed_password=pwd_context.hash(kwargs["password"]),
+        )
+
+        self.session.add(user)
+        self.session.commit()
+        self.session.refresh(user)
+        return user
+
+    def delete(self, user: SQLUser):
+        self.session.delete(user)
+        self.session.commit()
+
+    def delete_realm(self):
+        pass
+
+
 @pytest.fixture
-def keycloak_admin():
+def user_manager(session) -> BaseUserManager:
     if not isinstance(env.auth, KeycloakSettings):
-        admin = None
+        admin = SQLUserManger(session)
     else:
         keycloak_openid = KeycloakOpenID(
             server_url=env.auth.server_url,
@@ -69,9 +162,10 @@ def keycloak_admin():
             except Exception:
                 pass
 
+        admin = KeyCloakUserManger(admin)
+
     yield admin
-    if admin:
-        admin.delete_realm(env.auth.realm_name)
+    admin.delete_realm()
 
 
 @pytest.fixture
@@ -126,107 +220,35 @@ def admin_user_password():
 
 
 @pytest.fixture
-def admin_user(session, admin_user_password, keycloak_admin):
-    username = "some.one@department.gov.uk"
-    if keycloak_admin:
-        new_user_id = keycloak_admin.create_user(
-            {
-                "email": username,
-                "username": username,
-                "enabled": True,
-                "firstName": "some",
-                "lastName": "one",
-                "credentials": [
-                    {
-                        "type": "password",
-                        "value": admin_user_password,
-                        "temporary": False,
-                    }
-                ],
-                "attributes": {
-                    "is_admin": True,
-                    "requests_per_minute": 60,
-                    "tokens_per_minute": 100_000,
-                    "cost_usd_per_month": 10,
-                },
-            },
-            exist_ok=True,
-        )
-    else:
-        new_user_id = str(uuid4())
-
-    user = UserDB(
-        id=UUID(new_user_id),
-        username=username,
+def admin_user(session, admin_user_password, user_manager: BaseUserManager):
+    user = user_manager.create(
+        username="some.one@department.gov.uk",
         password=admin_user_password,
         is_admin=True,
         requests_per_minute=60,
         tokens_per_minute=100_000,
         cost_usd_per_month=10,
-        hashed_password=pwd_context.hash(admin_user_password),
     )
-
-    session.add(user)
-    session.commit()
 
     yield user
 
-    session.delete(user)
-    session.commit()
-    if keycloak_admin:
-        keycloak_admin.delete_user(user_id=new_user_id)
+    user_manager.delete(user=user)
 
 
 @pytest.fixture
-def normal_user(session, keycloak_admin, admin_user_password):
-    username = "an.other@department.gov.uk"
-    if keycloak_admin:
-        new_user_id = keycloak_admin.create_user(
-            {
-                "email": username,
-                "username": username,
-                "enabled": True,
-                "firstName": "an",
-                "lastName": "other",
-                "credentials": [
-                    {
-                        "type": "password",
-                        "value": admin_user_password,
-                        "temporary": False,
-                    }
-                ],
-                "attributes": {
-                    "is_admin": False,
-                    "requests_per_minute": 60,
-                    "tokens_per_minute": 1_000,
-                    "cost_usd_per_month": 10,
-                },
-            },
-            exist_ok=True,
-        )
-    else:
-        new_user_id = str(uuid4())
-
-    user = UserDB(
-        id=UUID(new_user_id),
+def normal_user(user_manager, admin_user_password):
+    user = user_manager.create(
         username="an.other@department.gov.uk",
         password=admin_user_password,
         is_admin=False,
         requests_per_minute=60,
         tokens_per_minute=1_000,
         cost_usd_per_month=10,
-        hashed_password=pwd_context.hash(admin_user_password),
     )
-
-    session.add(user)
-    session.commit()
 
     yield user
 
-    session.delete(user)
-    session.commit()
-    if keycloak_admin:
-        keycloak_admin.delete_user(user_id=new_user_id)
+    user_manager.delete(user=user)
 
 
 @pytest.fixture

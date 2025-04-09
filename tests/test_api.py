@@ -10,6 +10,10 @@ from llm_freeway.api import app, get_session
 from llm_freeway.settings import KeycloakSettings, env
 from tests.conftest import get_headers
 
+skip_keycloak = pytest.mark.skipif(
+    isinstance(env.auth, KeycloakSettings), reason="cant test keycloak-users"
+)
+
 
 def test_chat_completions(client, payload, normal_user, gpt_4o):
     response = client.post(
@@ -186,6 +190,7 @@ async def test_chat_completions_streaming(
     assert log_response_json[0]["user_id"] == str(normal_user.id)
 
 
+@skip_keycloak
 def test_get_users(client, admin_user, normal_user):
     response = client.get("/users", headers=get_headers(normal_user))
 
@@ -197,6 +202,7 @@ def test_get_users(client, admin_user, normal_user):
     assert users[0]["id"] == str(normal_user.id)
 
 
+@skip_keycloak
 def test_get_users_not_admin(client, admin_user, normal_user):
     response = client.get("/users", headers=get_headers(admin_user))
 
@@ -207,6 +213,7 @@ def test_get_users_not_admin(client, admin_user, normal_user):
     assert len(users) == 2
 
 
+@skip_keycloak
 def test_create_user(client, admin_user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
@@ -219,6 +226,7 @@ def test_create_user(client, admin_user):
     assert response_json["username"] == "some-one"
 
 
+@skip_keycloak
 def test_create_user_not_admin(client, normal_user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
@@ -230,6 +238,7 @@ def test_create_user_not_admin(client, normal_user):
     }
 
 
+@skip_keycloak
 def test_update_user(client, admin_user, normal_user):
     payload = {"username": "someone-else", "password": "password", "is_admin": True}
 
@@ -244,6 +253,7 @@ def test_update_user(client, admin_user, normal_user):
     assert response_json["username"] == "someone-else"
 
 
+@skip_keycloak
 def test_update_user_not_admin(client, normal_user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
@@ -257,6 +267,7 @@ def test_update_user_not_admin(client, normal_user):
     }
 
 
+@skip_keycloak
 def test_update_user_does_not_exist(client, admin_user):
     payload = {"username": "some-one", "password": "password", "is_admin": False}
 
@@ -270,6 +281,7 @@ def test_update_user_does_not_exist(client, admin_user):
     assert response.json() == {"detail": "user does not exist"}
 
 
+@skip_keycloak
 def test_delete_user(client, admin_user, normal_user):
     response = client.delete(
         f"/users/{normal_user.id}", headers=get_headers(admin_user)
@@ -278,6 +290,7 @@ def test_delete_user(client, admin_user, normal_user):
     assert response.status_code == httpx.codes.OK
 
 
+@skip_keycloak
 def test_delete_user_not_admin(client, normal_user):
     response = client.delete(
         f"/users/{normal_user.id}", headers=get_headers(normal_user)
@@ -289,9 +302,7 @@ def test_delete_user_not_admin(client, normal_user):
     }
 
 
-@pytest.mark.skipif(
-    isinstance(env.auth, KeycloakSettings), reason="no test for keycloak"
-)
+@skip_keycloak
 def test_token(client, admin_user, admin_user_password):
     payload = {"username": admin_user.username, "password": admin_user_password}
 
@@ -306,6 +317,7 @@ def test_token(client, admin_user, admin_user_password):
     assert token["sub"] == admin_user.username
 
 
+@skip_keycloak
 def test_token_fail(client, admin_user):
     payload = {"username": admin_user.username, "password": "wrong password"}
 

@@ -18,9 +18,9 @@ from llm_freeway.auth import get_admin_user, get_current_user, get_token
 from llm_freeway.database import (
     LLM,
     EventLog,
+    SQLUser,
     Token,
     User,
-    UserDB,
     authenticate_user,
     engine,
     get_session,
@@ -206,7 +206,7 @@ def get_users(
         data = [current_user]
     else:
         skip = (page - 1) * size
-        data = session.exec(select(UserDB).offset(skip).limit(size)).all()
+        data = session.exec(select(SQLUser).offset(skip).limit(size)).all()
 
     return UserResponse(page=page, size=size, items=data)
 
@@ -223,7 +223,7 @@ def create_user(
     session: Annotated[Session, Depends(get_session)],
     user: UserRequest,
 ) -> User:
-    user_to_create = UserDB(
+    user_to_create = SQLUser(
         username=user.username,
         is_admin=user.is_admin,
         hashed_password=pwd_context.hash(user.password),
@@ -243,7 +243,7 @@ def update_user(
     user_id: UUID,
     user: UserRequest,
 ) -> User:
-    user_to_update: UserDB = session.get(UserDB, user_id)
+    user_to_update: SQLUser = session.get(SQLUser, user_id)
     if user_to_update is None:
         raise HTTPException(
             status_code=404,
@@ -267,8 +267,8 @@ def delete_user(
     session: Annotated[Session, Depends(get_session)],
     user_id: UUID,
 ) -> None:
-    user_to_delete: UserDB = session.exec(
-        select(UserDB).where(UserDB.id == user_id)
+    user_to_delete: SQLUser = session.exec(
+        select(SQLUser).where(SQLUser.id == user_id)
     ).one()
     session.delete(user_to_delete)
     session.commit()

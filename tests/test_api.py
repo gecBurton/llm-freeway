@@ -1,4 +1,5 @@
 import json
+from uuid import UUID
 
 import httpx
 import jwt
@@ -314,7 +315,7 @@ def test_token(client, admin_user, admin_user_password):
     token = jwt.decode(
         response_json["access_token"], options={"verify_signature": False}
     )
-    assert token["sub"] == admin_user.username
+    assert UUID(token["sub"]) == admin_user.id
 
 
 @skip_keycloak

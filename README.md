@@ -1,6 +1,7 @@
-# this is a just-for-fun project, feel free to copy but do not use this as-is!
+> [!CAUTION]
+> This is a just-for-fun project, feel free to copy but do not use this as-is!
 
-## LLM Freeway
+# LLM Freeway
 
 llm-freeway is a simple, secure and open-source proxy server for litellm.
 

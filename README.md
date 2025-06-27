@@ -10,8 +10,8 @@ llm-freeway is a simple, secure and open-source proxy server for litellm.
 ## Data
 
 * models loaded from json on disk/s3
-* user data from KeyCloak (Cognito will be added)
-* logs to Elastic/OpenSearch/postgres
+* user data from KeyCloak 
+* logs to postgres
 
 
 ## features
